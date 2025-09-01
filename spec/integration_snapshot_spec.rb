@@ -33,7 +33,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
         puts "Inserted docs: total=#{docs.size}, active=#{active_docs.size} (first 3 active):"
         puts active_docs.first(3).map { |d| d.inspect }
 
-        # First run
+        # First run (JSONL)
         Purplelight.snapshot(
           client: client,
           collection: :users,
@@ -97,6 +97,32 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
         data = JSON.parse(File.read(manifest_path))
         total_rows = data.fetch('parts', []).sum { |p| p['rows'].to_i }
         puts "Manifest summary: parts=#{data.fetch('parts', []).size}, rows=#{total_rows}"
+
+        # CSV single-file run
+        Purplelight.snapshot(
+          client: client,
+          collection: :users,
+          output: dir,
+          format: :csv,
+          query: { active: true },
+          sharding: { mode: :single_file, prefix: 'users_csv' },
+          resume: { enabled: true },
+        )
+        csv_parts = Dir[File.join(dir, 'users_csv.csv*')]
+        expect(csv_parts.size).to eq(1)
+        csv_path = csv_parts.first
+        puts "CSV output path: #{File.basename(csv_path)}"
+        if csv_path.end_with?(".gz")
+          Zlib::GzipReader.open(csv_path) do |gz|
+            puts "CSV sample lines:"
+            3.times { puts(gz.gets&.strip) }
+          end
+        else
+          File.open(csv_path, 'r') do |f|
+            puts "CSV sample lines:"
+            3.times { puts(f.gets&.strip) }
+          end
+        end
       ensure
         system("docker rm -f #{container} > /dev/null 2>&1")
       end

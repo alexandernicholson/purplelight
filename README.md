@@ -46,3 +46,16 @@ Outputs files like:
 
 Phase 1 (JSONL + zstd, partitioning, resume, size-based sharding) in progress.
 
+### CSV usage (single-file)
+
+```ruby
+Purplelight.snapshot(
+  client: client,
+  collection: 'users',
+  output: '/data/exports',
+  format: :csv,
+  sharding: { mode: :single_file, prefix: 'users' },
+  resume: { enabled: true }
+)
+```
+

@@ -6,6 +6,7 @@ require 'fileutils'
 require_relative 'partitioner'
 require_relative 'queue'
 require_relative 'writer_jsonl'
+require_relative 'writer_csv'
 require_relative 'manifest'
 require_relative 'errors'
 
@@ -90,12 +91,15 @@ module Purplelight
       queue = ByteQueue.new(max_bytes: @queue_size_bytes)
 
       # Writer
-      case @format
-      when :jsonl
-        writer = WriterJSONL.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest)
-      else
-        raise ArgumentError, "format not implemented: #{@format}"
-      end
+      writer = case @format
+               when :jsonl
+                 WriterJSONL.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest)
+               when :csv
+                 single_file = (@sharding && @sharding[:mode].to_s == 'single_file')
+                 WriterCSV.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest, single_file: single_file)
+               else
+                 raise ArgumentError, "format not implemented: #{@format}"
+               end
 
       # Start reader threads
       readers = partition_filters.each_with_index.map do |pf, idx|

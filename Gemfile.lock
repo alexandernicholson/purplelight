@@ -2,6 +2,7 @@ PATH
   remote: .
   specs:
     purplelight (0.1.0)
+      csv
       mongo (>= 2.19)
       oj (>= 3.16)
 
@@ -11,6 +12,7 @@ GEM
     base64 (0.3.0)
     bigdecimal (3.2.2)
     bson (5.1.1)
+    csv (3.3.5)
     diff-lcs (1.6.2)
     mongo (2.21.3)
       base64
