@@ -59,3 +59,28 @@ Purplelight.snapshot(
 )
 ```
 
+### Parquet usage (requires Arrow and Parquet gems)
+
+Add optional dependencies:
+
+```ruby
+# Gemfile
+group :parquet do
+  gem 'red-arrow', '~> 15.0'
+  gem 'red-parquet', '~> 15.0'
+end
+```
+
+Then:
+
+```ruby
+Purplelight.snapshot(
+  client: client,
+  collection: 'users',
+  output: '/data/exports',
+  format: :parquet,
+  sharding: { mode: :single_file, prefix: 'users' },
+  resume: { enabled: true }
+)
+```
+

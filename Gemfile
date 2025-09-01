@@ -10,4 +10,10 @@ group :compression do
   # gem "zstd-ruby", "~> 1.5"
 end
 
+group :parquet do
+  # Optional: Apache Arrow + Parquet support
+  gem "red-arrow", ">= 21.0"
+  gem "red-parquet", ">= 21.0"
+end
+
 

@@ -8,6 +8,16 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
     system('docker --version > /dev/null 2>&1')
   end
 
+  def arrow_available?
+    begin
+      require 'arrow'
+      require 'parquet'
+      true
+    rescue LoadError
+      false
+    end
+  end
+
   it 'exports a small collection and supports resume' do
     unless docker?
       skip 'Docker not available; skipping integration test'
@@ -122,6 +132,24 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
             puts "CSV sample lines:"
             3.times { puts(f.gets&.strip) }
           end
+        end
+
+        # Parquet single-file run (optional)
+        if arrow_available?
+          Purplelight.snapshot(
+            client: client,
+            collection: :users,
+            output: dir,
+            format: :parquet,
+            query: { active: true },
+            sharding: { mode: :single_file, prefix: 'users_parquet' },
+            resume: { enabled: true },
+          )
+          pq = Dir[File.join(dir, 'users_parquet.parquet')]
+          puts "Parquet output: #{File.basename(pq.first)}" unless pq.empty?
+          expect(pq.size).to eq(1)
+        else
+          puts "Arrow/Parquet not available; skipping Parquet test"
         end
       ensure
         system("docker rm -f #{container} > /dev/null 2>&1")

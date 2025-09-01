@@ -7,6 +7,7 @@ require_relative 'partitioner'
 require_relative 'queue'
 require_relative 'writer_jsonl'
 require_relative 'writer_csv'
+require_relative 'writer_parquet'
 require_relative 'manifest'
 require_relative 'errors'
 
@@ -97,6 +98,9 @@ module Purplelight
                when :csv
                  single_file = (@sharding && @sharding[:mode].to_s == 'single_file')
                  WriterCSV.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest, single_file: single_file)
+               when :parquet
+                 single_file = (@sharding && @sharding[:mode].to_s == 'single_file')
+                 WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger, manifest: manifest, single_file: single_file)
                else
                  raise ArgumentError, "format not implemented: #{@format}"
                end
