@@ -1,0 +1,47 @@
+PATH
+  remote: .
+  specs:
+    purplelight (0.1.0)
+      mongo (>= 2.19)
+      oj (>= 3.16)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    base64 (0.3.0)
+    bigdecimal (3.2.2)
+    bson (5.1.1)
+    diff-lcs (1.6.2)
+    mongo (2.21.3)
+      base64
+      bson (>= 4.14.1, < 6.0.0)
+    oj (3.16.11)
+      bigdecimal (>= 3.0)
+      ostruct (>= 0.2)
+    ostruct (0.6.3)
+    rake (13.3.0)
+    rspec (3.13.1)
+      rspec-core (~> 3.13.0)
+      rspec-expectations (~> 3.13.0)
+      rspec-mocks (~> 3.13.0)
+    rspec-core (3.13.5)
+      rspec-support (~> 3.13.0)
+    rspec-expectations (3.13.5)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.13.0)
+    rspec-mocks (3.13.5)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.13.0)
+    rspec-support (3.13.5)
+
+PLATFORMS
+  arm64-darwin-24
+  ruby
+
+DEPENDENCIES
+  purplelight!
+  rake (>= 13.0)
+  rspec (>= 3.12)
+
+BUNDLED WITH
+   2.6.8
