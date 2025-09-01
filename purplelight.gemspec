@@ -19,13 +19,16 @@ Gem::Specification.new do |spec|
   spec.metadata["changelog_uri"] = "https://github.com/example/purplelight/releases"
 
   spec.files = Dir.chdir(__dir__) do
-    Dir["lib/**/*.rb", "README.md", "LICENSE", "Rakefile"]
+    Dir["lib/**/*.rb", "bin/*", "README.md", "LICENSE", "Rakefile"]
   end
+  spec.bindir        = "bin"
+  spec.executables   = ["purplelight"]
 
   # Runtime deps
   spec.add_dependency "mongo", ">= 2.19"
   spec.add_dependency "oj", ">= 3.16"
   spec.add_dependency "csv"
+  spec.add_dependency "logger", ">= 1.6"
   # zstd compression is optional; if the zstd gem is not installed, we fallback to gzip.
   # Supported gems include 'ruby-zstds' (provides ZSTDS) or 'zstd-ruby'. We don't hard-depend to keep install light.
 

@@ -1,0 +1,82 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'json'
+require 'mongo'
+require_relative '../lib/purplelight'
+
+options = {
+  format: :jsonl,
+  compression: :zstd,
+  partitions: nil,
+  batch_size: 2000,
+  output: nil,
+  query: {},
+  sharding: { mode: :by_size, part_bytes: 256 * 1024 * 1024, prefix: nil },
+  resume: { enabled: true }
+}
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: purplelight snapshot [options]"
+
+  opts.on('-u', '--uri URI', 'MongoDB connection URI (required)') { |v| options[:uri] = v }
+  opts.on('-d', '--db NAME', 'Database name (required)') { |v| options[:db] = v }
+  opts.on('-c', '--collection NAME', 'Collection name (required)') { |v| options[:collection] = v }
+  opts.on('-o', '--output PATH', 'Output directory or file (required)') { |v| options[:output] = v }
+  opts.on('-f', '--format FORMAT', 'Format: jsonl|csv|parquet (default jsonl)') { |v| options[:format] = v.to_sym }
+  opts.on('--compression NAME', 'Compression: zstd|gzip|none') { |v| options[:compression] = v.to_sym }
+  opts.on('--partitions N', Integer, 'Number of partitions') { |v| options[:partitions] = v }
+  opts.on('--batch-size N', Integer, 'Mongo batch size (default 2000)') { |v| options[:batch_size] = v }
+  opts.on('--by-size BYTES', Integer, 'Shard by size (bytes); default 268435456') { |v| options[:sharding] = { mode: :by_size, part_bytes: v } }
+  opts.on('--single-file', 'Write a single output file') { options[:sharding] = { mode: :single_file } }
+  opts.on('--prefix NAME', 'Output file prefix') do |v|
+    options[:sharding] ||= {}
+    options[:sharding][:prefix] = v
+  end
+  opts.on('-q', '--query JSON', 'Filter query as JSON') { |v| options[:query] = JSON.parse(v) }
+  opts.on('--version', 'Show version') do
+    puts Purplelight::VERSION
+    exit 0
+  end
+  opts.on('-h', '--help', 'Show help') do
+    puts opts
+    exit 0
+  end
+end
+
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  warn e.message
+  warn parser
+  exit 1
+end
+
+%i[uri db collection output].each do |k|
+  if options[k].nil? || options[k].to_s.empty?
+    warn "Missing required option: --#{k}"
+    warn parser
+    exit 1
+  end
+end
+
+client = Mongo::Client.new(options[:uri])
+options[:partitions] ||= (Etc.respond_to?(:nprocessors) ? [Etc.nprocessors * 2, 4].max : 4)
+
+ok = Purplelight.snapshot(
+  client: client.use(options[:db]),
+  collection: options[:collection],
+  output: options[:output],
+  format: options[:format],
+  compression: options[:compression],
+  partitions: options[:partitions],
+  batch_size: options[:batch_size],
+  query: options[:query],
+  sharding: options[:sharding],
+  resume: { enabled: true },
+  on_progress: ->(s) { $stderr.puts("progress: #{s.to_json}") }
+)
+
+exit(ok ? 0 : 1)
+
+
