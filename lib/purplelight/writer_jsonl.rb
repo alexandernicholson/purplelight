@@ -106,7 +106,9 @@ module Purplelight
     end
 
     def write_buffer(buffer)
+      t = Thread.current[:pl_telemetry]&.start(:write_time)
       @io.write(buffer)
+      Thread.current[:pl_telemetry]&.finish(:write_time, t)
       @bytes_written += buffer.bytesize
       rotate_if_needed
     end
@@ -114,8 +116,10 @@ module Purplelight
     def rotate!
       return unless @io
 
+      t = Thread.current[:pl_telemetry]&.start(:rotate_time)
       finalize_current_part!
       @io.close
+      Thread.current[:pl_telemetry]&.finish(:rotate_time, t)
       @io = nil
       ensure_open!
     end

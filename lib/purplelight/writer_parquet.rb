@@ -44,8 +44,13 @@ module Purplelight
 
       ensure_open!
       unless @buffer_docs.empty?
+        t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
         table = build_table(@buffer_docs)
+        Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
+
+        t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
         write_table(table, @writer_path, append: false)
+        Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
       end
       finalize_current_part!
       @closed = true

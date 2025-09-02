@@ -10,6 +10,7 @@ require_relative 'writer_csv'
 require_relative 'writer_parquet'
 require_relative 'manifest'
 require_relative 'errors'
+require_relative 'telemetry'
 
 module Purplelight
   # Snapshot orchestrates partition planning, parallel reads, and writing.
@@ -37,7 +38,7 @@ module Purplelight
                    resume: { enabled: true, state_path: nil, overwrite_incompatible: false },
                    sharding: { mode: :by_size, part_bytes: DEFAULTS[:rotate_bytes], prefix: nil },
                    logger: nil, on_progress: nil, read_concern: DEFAULTS[:read_concern], read_preference: DEFAULTS[:read_preference],
-                   no_cursor_timeout: DEFAULTS[:no_cursor_timeout])
+                   no_cursor_timeout: DEFAULTS[:no_cursor_timeout], telemetry: nil)
       @client = client
       @collection = client[collection]
       @output = output
@@ -60,6 +61,10 @@ module Purplelight
       @no_cursor_timeout = no_cursor_timeout
 
       @running = true
+      @telemetry_enabled = telemetry ? telemetry.enabled? : (ENV['PL_TELEMETRY'] == '1')
+      @telemetry = telemetry || (
+        @telemetry_enabled ? Telemetry.new(enabled: true) : Telemetry::NULL
+      )
     end
 
     # rubocop:disable Naming/PredicateMethod
@@ -90,8 +95,10 @@ module Purplelight
       manifest.ensure_partitions!(@partitions)
 
       # Plan partitions
+      t_plan = @telemetry.start(:partition_plan_time)
       partition_filters = Partitioner.object_id_partitions(collection: @collection, query: @query,
-                                                           partitions: @partitions)
+                                                           partitions: @partitions, telemetry: @telemetry)
+      @telemetry.finish(:partition_plan_time, t_plan)
 
       # Reader queue
       queue = ByteQueue.new(max_bytes: @queue_size_bytes)
@@ -116,12 +123,17 @@ module Purplelight
       # Start reader threads
       readers = partition_filters.each_with_index.map do |pf, idx|
         Thread.new do
-          read_partition(idx: idx, filter_spec: pf, queue: queue, batch_size: @batch_size, manifest: manifest)
+          local_telemetry = @telemetry_enabled ? Telemetry.new(enabled: true) : Telemetry::NULL
+          read_partition(idx: idx, filter_spec: pf, queue: queue, batch_size: @batch_size, manifest: manifest, telemetry: local_telemetry)
+          # Merge per-thread telemetry
+          @telemetry.merge!(local_telemetry) if @telemetry_enabled
         end
       end
 
       # Writer loop
+      writer_telemetry = @telemetry_enabled ? Telemetry.new(enabled: true) : Telemetry::NULL
       writer_thread = Thread.new do
+        Thread.current[:pl_telemetry] = writer_telemetry if @telemetry_enabled
         loop do
           batch = queue.pop
           break if batch.nil?
@@ -146,8 +158,22 @@ module Purplelight
       readers.each(&:join)
       queue.close
       writer_thread.join
+      @telemetry.merge!(writer_telemetry) if @telemetry_enabled
       @running = false
       progress_thread.join
+      if @telemetry_enabled
+        total = @telemetry.timers.values.sum
+        breakdown = @telemetry.timers
+                              .sort_by { |_k, v| -v }
+                              .map { |k, v| [k, v, total.zero? ? 0 : ((v / total) * 100.0)] }
+        if @logger
+          @logger.info('Telemetry (seconds and % of timed work):')
+          breakdown.each { |k, v, pct| @logger.info("  #{k}: #{v.round(3)}s (#{pct.round(1)}%)") }
+        else
+          puts 'Telemetry (seconds and % of timed work):'
+          breakdown.each { |k, v, pct| puts "  #{k}: #{v.round(3)}s (#{pct.round(1)}%)" }
+        end
+      end
       true
     end
     # rubocop:enable Naming/PredicateMethod
@@ -167,7 +193,7 @@ module Purplelight
       [dir, prefix]
     end
 
-    def read_partition(idx:, filter_spec:, queue:, batch_size:, manifest:)
+    def read_partition(idx:, filter_spec:, queue:, batch_size:, manifest:, telemetry: Telemetry::NULL)
       filter = filter_spec[:filter]
       sort = filter_spec[:sort] || { _id: 1 }
       hint = @hint || filter_spec[:hint] || { _id: 1 }
@@ -202,25 +228,32 @@ module Purplelight
         cursor.each do |doc|
           last_id = doc['_id']
           doc = @mapper.call(doc) if @mapper
+          t_ser = telemetry.start(:serialize_time)
           if encode_lines
             line = "#{JSON.generate(doc)}\n"
+            telemetry.finish(:serialize_time, t_ser)
             bytes = line.bytesize
             buffer << line
           else
             # For CSV/Parquet keep raw docs to allow schema/row building
             bytes = (JSON.generate(doc).bytesize + 1)
+            telemetry.finish(:serialize_time, t_ser)
             buffer << doc
           end
           buffer_bytes += bytes
           next unless buffer.length >= batch_size || buffer_bytes >= 1_000_000
 
+          t_q = telemetry.start(:queue_wait_time)
           queue.push(buffer, bytes: buffer_bytes)
+          telemetry.finish(:queue_wait_time, t_q)
           manifest.update_partition_checkpoint!(idx, last_id)
           buffer = []
           buffer_bytes = 0
         end
         unless buffer.empty?
+          t_q = telemetry.start(:queue_wait_time)
           queue.push(buffer, bytes: buffer_bytes)
+          telemetry.finish(:queue_wait_time, t_q)
           manifest.update_partition_checkpoint!(idx, last_id)
           buffer = []
           buffer_bytes = 0

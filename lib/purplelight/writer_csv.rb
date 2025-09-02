@@ -81,8 +81,10 @@ module Purplelight
 
       @csv&.flush
       if @io
+        t = Thread.current[:pl_telemetry]&.start(:rotate_time)
         finalize_current_part!
         @io.close
+        Thread.current[:pl_telemetry]&.finish(:rotate_time, t)
       end
       @closed = true
     end
@@ -122,8 +124,10 @@ module Purplelight
     def rotate!
       return unless @io
 
+      t = Thread.current[:pl_telemetry]&.start(:rotate_time)
       finalize_current_part!
       @io.close
+      Thread.current[:pl_telemetry]&.finish(:rotate_time, t)
       @io = nil
       @csv = nil
       ensure_open!

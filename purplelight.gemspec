@@ -28,7 +28,7 @@ Gem::Specification.new do |spec|
   # Runtime deps
   spec.add_dependency 'csv'
   spec.add_dependency 'logger', '>= 1.6'
-  spec.add_dependency 'mongo', '>= 2.19'
+  spec.add_dependency 'mongo', '>= 2.21.3'
   # zstd compression is optional; if the zstd gem is not installed, we fallback to gzip.
   # Supported gems include 'ruby-zstds' (provides ZSTDS) or 'zstd-ruby'. We don't hard-depend to keep install light.
 
