@@ -15,8 +15,7 @@ jobs:
         ports:
           - 27017:27017
         options: >-
-          --health-cmd "mongosh --eval 'db.runCommand({hello:1})'" \
-          --health-interval 5s --health-timeout 5s --health-retries 20
+          --health-cmd "mongosh --eval 'db.runCommand({hello:1})'" --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
