@@ -8,6 +8,21 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
     system('docker --version > /dev/null 2>&1')
   end
 
+  def wait_for_mongo(url, timeout: 60)
+    start = Time.now
+    loop do
+      begin
+        client = Mongo::Client.new(url, server_api: {version: '1'})
+        client.database.command(hello: 1)
+        return true
+      rescue => _e
+        break if (Time.now - start) > timeout
+        sleep 1
+      end
+    end
+    false
+  end
+
   def arrow_available?
     begin
       require 'arrow'
@@ -19,23 +34,24 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
   end
 
   it 'exports a small collection and supports resume' do
-    unless docker?
-      skip 'Docker not available; skipping integration test'
-    end
-
     Dir.mktmpdir('purplelight-e2e') do |dir|
-      container = "pl-mongo-#{Time.now.to_i}"
+      container = nil
+      mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
       begin
-        # Start MongoDB 7 container
-        system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or skip 'failed to start docker'
-        # Wait for readiness by polling the hello command via mongo shell
-        30.times do
-          ok = system("docker exec #{container} mongosh --eval 'db.runCommand({hello:1})' > /dev/null 2>&1")
-          break if ok
-          sleep 1
+        # Prefer provided MONGO_URL; otherwise bring up a dockerized mongo
+        if ENV['MONGO_URL']
+          raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
+        else
+          if docker?
+            container = "pl-mongo-#{Time.now.to_i}"
+            system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+            raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
+          else
+            raise 'Mongo not available (no MONGO_URL and no Docker)'
+          end
         end
 
-        client = Mongo::Client.new('mongodb://127.0.0.1:27017', server_api: {version: '1'})
+        client = Mongo::Client.new(mongo_url, server_api: {version: '1'})
         coll = client[:users]
         docs = 1_000.times.map { |i| { _id: BSON::ObjectId.new, email: "user#{i}@ex.com", active: (i % 2 == 0) } }
         coll.insert_many(docs)
@@ -152,7 +168,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
           puts "Arrow/Parquet not available; skipping Parquet test"
         end
       ensure
-        system("docker rm -f #{container} > /dev/null 2>&1")
+        system("docker rm -f #{container} > /dev/null 2>&1") if container
       end
     end
   end

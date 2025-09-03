@@ -30,7 +30,7 @@ jobs:
         run: |
           echo "No extra system deps for default test run"
 
-      - name: Run specs
+      - name: Run specs (Linux, with Mongo service)
         env:
           MONGO_URL: mongodb://127.0.0.1:27017
         run: |
@@ -48,8 +48,21 @@ jobs:
           ruby-version: '3.2'
           bundler-cache: true
 
-      - name: Run unit/specs (skip docker-dependent bench)
+      - name: Start MongoDB (Docker) on macOS
+        run: |
+          docker version
+          docker run -d --rm --name gha-mongo -p 27017:27017 mongo:7
+          for i in {1..60}; do
+            if docker exec gha-mongo mongosh --eval 'db.runCommand({hello:1})' >/dev/null 2>&1; then
+              echo "Mongo is ready"; break; fi; sleep 1; done
+      - name: Run specs (macOS, with Docker Mongo)
+        env:
+          MONGO_URL: mongodb://127.0.0.1:27017
         run: |
           bundle exec rspec --format progress --tag ~benchmark
+      - name: Cleanup MongoDB container
+        if: always()
+        run: |
+          docker rm -f gha-mongo || true
 
 
