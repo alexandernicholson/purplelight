@@ -117,3 +117,13 @@ Key points:
 - Writers serialize to JSONL/CSV/Parquet with default zstd compression and rotate by target size.
 - A manifest records parts and per-partition checkpoints for safe resume.
 
+### Quick Benchmark
+```
+> BENCH=1 bundle exec rspec spec/benchmark_perf_spec.rb --format doc
+Performance benchmark (1M docs, gated by BENCH=1)
+Benchmark results:
+  Inserted: 1000000 docs in 12.54s
+  Exported: 1000000 docs in 12.58s
+  Parts:    1, Bytes: 10744410
+  Throughput: 79487.72 docs/s, 0.81 MB/s
+```
