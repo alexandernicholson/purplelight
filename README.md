@@ -4,10 +4,18 @@ Snapshot MongoDB collections efficiently from Ruby with resumable, partitioned e
 
 ### Install
 
+Purplelight is published on RubyGems: [purplelight on RubyGems](https://rubygems.org/gems/purplelight).
+
 Add to your Gemfile:
 
 ```ruby
-gem 'purplelight'
+gem 'purplelight', '~> 0.1.0'
+```
+
+Or install directly:
+
+```bash
+gem install purplelight
 ```
 
 ### Quick start
