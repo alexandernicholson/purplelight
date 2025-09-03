@@ -42,10 +42,6 @@ Outputs files like:
   users.manifest.json
 ```
 
-### Status
-
-Phase 1 (JSONL + zstd, partitioning, resume, size-based sharding) in progress.
-
 ### CSV usage (single-file)
 
 ```ruby
@@ -83,4 +79,41 @@ Purplelight.snapshot(
   resume: { enabled: true }
 )
 ```
+
+### CLI
+
+```bash
+bundle exec bin/purplelight \
+  --uri "$MONGO_URL" \
+  --db mydb --collection users \
+  --output /data/exports \
+  --format jsonl --partitions 8 --by-size $((256*1024*1024)) --prefix users
+```
+
+### Architecture
+
+```mermaid
+flowchart LR
+  A[Partition Planner] -->|filters/ranges| B{{Reader Pool (threads)}}
+  B -->|batches of docs| C[Byte-Bounded Queue]
+  C --> D{{Serializer}}
+  D -->|JSONL/CSV/Parquet| E[Sink w/ size-based rotation]
+  E --> F[Parts + Manifest]
+
+  subgraph Concurrency
+    B
+    C
+    D
+  end
+
+  subgraph Resume
+    F -->|checkpoints| A
+  end
+```
+
+Key points:
+- Partitions default to contiguous `_id` ranges with sorted reads and `no_cursor_timeout`.
+- Readers stream batches into a bounded, byte-aware queue to provide backpressure.
+- Writers serialize to JSONL/CSV/Parquet with default zstd compression and rotate by target size.
+- A manifest records parts and per-partition checkpoints for safe resume.
 
