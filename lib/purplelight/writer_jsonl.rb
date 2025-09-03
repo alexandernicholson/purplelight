@@ -14,13 +14,14 @@ module Purplelight
   class WriterJSONL
     DEFAULT_ROTATE_BYTES = 256 * 1024 * 1024
 
-    def initialize(directory:, prefix:, compression: :zstd, rotate_bytes: DEFAULT_ROTATE_BYTES, logger: nil, manifest: nil)
+    def initialize(directory:, prefix:, compression: :zstd, rotate_bytes: DEFAULT_ROTATE_BYTES, logger: nil, manifest: nil, compression_level: nil)
       @directory = directory
       @prefix = prefix
       @compression = compression
       @rotate_bytes = rotate_bytes
       @logger = logger
       @manifest = manifest
+      @compression_level = compression_level
 
       @part_index = nil
       @io = nil
@@ -37,10 +38,17 @@ module Purplelight
 
     def write_many(array_of_docs)
       ensure_open!
-      buffer = array_of_docs.map { |doc| Oj.dump(doc, mode: :compat) + "\n" }.join
+      # If upstream already produced newline-terminated strings, join fast.
+      if array_of_docs.first.is_a?(String)
+        buffer = array_of_docs.join
+        rows = array_of_docs.size
+      else
+        buffer = array_of_docs.map { |doc| Oj.dump(doc, mode: :compat) + "\n" }.join
+        rows = array_of_docs.size
+      end
       write_buffer(buffer)
-      @rows_written += array_of_docs.size
-      @manifest&.add_progress_to_part!(index: @part_index, rows_delta: array_of_docs.size, bytes_delta: buffer.bytesize)
+      @rows_written += rows
+      @manifest&.add_progress_to_part!(index: @part_index, rows_delta: rows, bytes_delta: buffer.bytesize)
     end
 
     def rotate_if_needed
@@ -76,13 +84,16 @@ module Purplelight
       when 'zstd'
         if defined?(ZSTDS)
           # ZSTDS::Writer supports IO-like interface
-          return ZSTDS::Writer.open(raw, level: 10)
+          level = @compression_level || 3
+          return ZSTDS::Writer.open(raw, level: level)
         else
           @logger&.warn("zstd gem not loaded; this should have been handled earlier")
-          return Zlib::GzipWriter.new(raw)
+          level = @compression_level || Zlib::DEFAULT_COMPRESSION
+          return Zlib::GzipWriter.new(raw, level)
         end
       when 'gzip'
-        return Zlib::GzipWriter.new(raw)
+        level = @compression_level || 1
+        return Zlib::GzipWriter.new(raw, level)
       when 'none'
         return raw
       else

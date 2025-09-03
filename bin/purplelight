@@ -13,7 +13,10 @@ options = {
   output: nil,
   query: {},
   sharding: { mode: :by_size, part_bytes: 256 * 1024 * 1024, prefix: nil },
-  resume: { enabled: true }
+  resume: { enabled: true },
+  read_preference: nil,
+  read_tags: nil,
+  dry_run: false
 }
 
 parser = OptionParser.new do |opts|
@@ -34,6 +37,17 @@ parser = OptionParser.new do |opts|
     options[:sharding][:prefix] = v
   end
   opts.on('-q', '--query JSON', 'Filter query as JSON') { |v| options[:query] = JSON.parse(v) }
+  opts.on('--read-preference MODE', 'Read preference mode: primary|primary_preferred|secondary|secondary_preferred|nearest') { |v| options[:read_preference] = v.to_sym }
+  opts.on('--read-tags TAGS', 'Comma-separated key=value list to target tagged nodes (e.g., nodeType=ANALYTICS,region=EAST)') do |v|
+    tags = {}
+    v.split(',').each do |pair|
+      k, val = pair.split('=', 2)
+      next if k.nil? || val.nil?
+      tags[k] = val
+    end
+    options[:read_tags] = tags unless tags.empty?
+  end
+  opts.on('--dry-run', 'Parse options and print effective read preference JSON, then exit') { options[:dry_run] = true }
   opts.on('--version', 'Show version') do
     puts Purplelight::VERSION
     exit 0
@@ -60,6 +74,18 @@ end
   end
 end
 
+effective_read = nil
+if options[:read_tags]
+  effective_read = { mode: (options[:read_preference] || :secondary), tag_sets: [options[:read_tags]] }
+elsif options[:read_preference]
+  effective_read = { mode: options[:read_preference] }
+end
+
+if options[:dry_run]
+  puts JSON.generate({ read_preference: effective_read })
+  exit 0
+end
+
 client = Mongo::Client.new(options[:uri])
 options[:partitions] ||= (Etc.respond_to?(:nprocessors) ? [Etc.nprocessors * 2, 4].max : 4)
 
@@ -73,6 +99,7 @@ ok = Purplelight.snapshot(
   batch_size: options[:batch_size],
   query: options[:query],
   sharding: options[:sharding],
+  read_preference: effective_read || options[:read_preference],
   resume: { enabled: true },
   on_progress: ->(s) { $stderr.puts("progress: #{s.to_json}") }
 )

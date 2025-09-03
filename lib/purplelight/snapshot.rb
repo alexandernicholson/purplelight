@@ -18,7 +18,7 @@ module Purplelight
       compression: :zstd,
       batch_size: 2_000,
       partitions: [Etc.respond_to?(:nprocessors) ? [Etc.nprocessors * 2, 4].max : 4, 32].min,
-      queue_size_bytes: 128 * 1024 * 1024,
+      queue_size_bytes: 256 * 1024 * 1024,
       rotate_bytes: 256 * 1024 * 1024,
       read_concern: { level: :majority },
       read_preference: :primary,
@@ -172,7 +172,10 @@ module Purplelight
       opts[:projection] = @projection if @projection
       opts[:batch_size] = batch_size if batch_size
       opts[:no_cursor_timeout] = @no_cursor_timeout
-      opts[:read] = { mode: @read_preference }
+      # Read preference can be a symbol (mode) or a full hash with tag_sets
+      if @read_preference
+        opts[:read] = @read_preference.is_a?(Hash) ? @read_preference : { mode: @read_preference }
+      end
       # Mongo driver expects read_concern as a hash like { level: :majority }
       if @read_concern
         opts[:read_concern] = @read_concern.is_a?(Hash) ? @read_concern : { level: @read_concern }
@@ -180,6 +183,7 @@ module Purplelight
 
       cursor = @collection.find(filter, opts)
 
+      encode_lines = (@format == :jsonl)
       buffer = []
       buffer_bytes = 0
       last_id = checkpoint
@@ -187,9 +191,15 @@ module Purplelight
         cursor.each do |doc|
           last_id = doc['_id']
           doc = @mapper.call(doc) if @mapper
-          json = Oj.dump(doc, mode: :compat)
-          bytes = json.bytesize + 1 # newline later
-          buffer << doc
+          if encode_lines
+            line = Oj.dump(doc, mode: :compat) + "\n"
+            bytes = line.bytesize
+            buffer << line
+          else
+            # For CSV/Parquet keep raw docs to allow schema/row building
+            bytes = (Oj.dump(doc, mode: :compat).bytesize + 1)
+            buffer << doc
+          end
           buffer_bytes += bytes
           if buffer.length >= batch_size || buffer_bytes >= 1_000_000
             queue.push(buffer, bytes: buffer_bytes)

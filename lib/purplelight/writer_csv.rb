@@ -45,11 +45,14 @@ module Purplelight
 
       # infer columns if needed from docs
       if @columns.nil?
-        @columns = infer_columns(array_of_docs)
+        sample_docs = array_of_docs.is_a?(Array) ? array_of_docs : []
+        sample_docs = sample_docs.reject { |d| d.is_a?(String) }
+        @columns = infer_columns(sample_docs)
         @csv << @columns if @headers
       end
 
       array_of_docs.each do |doc|
+        next if doc.is_a?(String)
         row = @columns.map { |k| extract_value(doc, k) }
         @csv << row
         @rows_written += 1

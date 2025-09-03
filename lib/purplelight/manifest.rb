@@ -32,6 +32,7 @@ module Purplelight
         'partitions' => []
       }
       @mutex = Mutex.new
+      @last_save_at = Time.now
     end
 
     def self.load(path)
@@ -102,7 +103,7 @@ module Purplelight
         part = @data['parts'][index]
         part['rows'] += rows_delta
         part['bytes'] += bytes_delta
-        save!
+        save_maybe!
       end
     end
 
@@ -121,6 +122,16 @@ module Purplelight
 
     def partitions
       @data['partitions']
+    end
+
+    private
+
+    def save_maybe!(interval_seconds: 2.0)
+      now = Time.now
+      if (now - @last_save_at) >= interval_seconds
+        save!
+        @last_save_at = now
+      end
     end
   end
 end

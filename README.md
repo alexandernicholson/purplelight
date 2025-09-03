@@ -117,6 +117,56 @@ Key points:
 - Writers serialize to JSONL/CSV/Parquet with default zstd compression and rotate by target size.
 - A manifest records parts and per-partition checkpoints for safe resume.
 
+### Read preference and node pinning
+
+You can direct reads to non-primary members or specific tagged nodes in a replica set (e.g., MongoDB Atlas analytics nodes) via `read_preference`.
+
+Programmatic examples:
+
+```ruby
+# Secondary reads
+Purplelight.snapshot(
+  client: client,
+  collection: 'events',
+  output: '/data/exports',
+  format: :jsonl,
+  read_preference: :secondary
+)
+
+# Pin to tagged nodes (Atlas analytics nodes)
+Purplelight.snapshot(
+  client: client,
+  collection: 'events',
+  output: '/data/exports',
+  format: :jsonl,
+  read_preference: { mode: :secondary, tag_sets: [{ 'nodeType' => 'ANALYTICS' }] }
+)
+```
+
+Notes:
+- `read_preference` accepts a symbol (mode) or a full hash with `mode` and optional `tag_sets`.
+- Use tags that exist on your cluster. Atlas analytics nodes can be targeted with `{ 'nodeType' => 'ANALYTICS' }`.
+
+CLI examples:
+
+```bash
+# Secondary reads
+bundle exec bin/purplelight \
+  --uri "$MONGO_URL" --db mydb --collection events --output /data/exports \
+  --format jsonl --read-preference secondary
+
+# Pin to tagged nodes (Atlas analytics nodes)
+bundle exec bin/purplelight \
+  --uri "$MONGO_URL" --db mydb --collection events --output /data/exports \
+  --format jsonl --read-preference secondary \
+  --read-tags nodeType=ANALYTICS,region=EAST
+
+# Inspect effective read preference without running
+bundle exec bin/purplelight \
+  --uri "$MONGO_URL" --db mydb --collection events --output /tmp \
+  --read-preference secondary --read-tags nodeType=ANALYTICS --dry-run
+```
+
 ### Quick Benchmark
 ```
 > BENCH=1 bundle exec rspec spec/benchmark_perf_spec.rb --format doc
