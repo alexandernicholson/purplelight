@@ -94,7 +94,7 @@ bundle exec bin/purplelight \
 
 ```mermaid
 flowchart LR
-  A[Partition planner] -->|filters/ranges| B[Reader pool (threads)]
+  A[Partition planner] -->|filters/ranges| B[Reader pool - threads]
   B -->|batches| C[Byte-bounded queue]
   C --> D[Serializer]
   D -->|JSONL/CSV/Parquet| E[Sink with size-based rotation]
