@@ -66,6 +66,8 @@ jobs:
 
       - name: Start MongoDB (Docker) on macOS
         run: |
+          curl -fsSL https://get.docker.com -o get-docker.sh
+          sudo sh get-docker.sh
           docker version
           docker run -d --rm --name gha-mongo -p 27017:27017 mongo:7
           for i in {1..60}; do
