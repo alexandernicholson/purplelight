@@ -47,16 +47,22 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         export_dir = dir
         prefix = 'bench_items'
         t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        partitions = (ENV['BENCH_PARTITIONS'] && ENV['BENCH_PARTITIONS'].to_i > 0) ? ENV['BENCH_PARTITIONS'].to_i : [Etc.respond_to?(:nprocessors) ? Etc.nprocessors * 2 : 4, 32].min
+        batch_size = (ENV['BENCH_BATCH_SIZE'] && ENV['BENCH_BATCH_SIZE'].to_i > 0) ? ENV['BENCH_BATCH_SIZE'].to_i : 5000
+        queue_mb = (ENV['BENCH_QUEUE_MB'] && ENV['BENCH_QUEUE_MB'].to_i > 0) ? ENV['BENCH_QUEUE_MB'].to_i : 256
+        rotate_mb = (ENV['BENCH_ROTATE_MB'] && ENV['BENCH_ROTATE_MB'].to_i > 0) ? ENV['BENCH_ROTATE_MB'].to_i : 512
+        compression = (ENV['BENCH_COMPRESSION'] && !ENV['BENCH_COMPRESSION'].empty?) ? ENV['BENCH_COMPRESSION'].to_sym : :gzip
         Purplelight.snapshot(
           client: db,
           collection: :items,
           output: export_dir,
           format: :jsonl,
-          compression: :gzip, # choose gzip to avoid requiring zstd locally
-          partitions: [Etc.respond_to?(:nprocessors) ? Etc.nprocessors * 2 : 4, 32].max,
-          batch_size: 5000,
+          compression: compression,
+          partitions: partitions,
+          batch_size: batch_size,
           query: {},
-          sharding: { mode: :by_size, part_bytes: 512 * 1024 * 1024, prefix: prefix },
+          sharding: { mode: :by_size, part_bytes: rotate_mb * 1024 * 1024, prefix: prefix },
+          queue_size_bytes: queue_mb * 1024 * 1024,
           resume: { enabled: true }
         )
         t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -77,6 +83,7 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         puts "  Exported: #{rows} docs in #{elapsed.round(2)}s"
         puts "  Parts:    #{parts.size}, Bytes: #{bytes}"
         puts "  Throughput: #{docs_per_sec} docs/s, #{mb_per_sec} MB/s"
+        puts "  Settings: partitions=#{partitions}, batch_size=#{batch_size}, queue_mb=#{queue_mb}, rotate_mb=#{rotate_mb}, compression=#{compression}"
 
         expect(rows).to eq(doc_count)
         expect(parts.size).to be > 0

@@ -117,6 +117,23 @@ Key points:
 - Writers serialize to JSONL/CSV/Parquet with default zstd compression and rotate by target size.
 - A manifest records parts and per-partition checkpoints for safe resume.
 
+### Tuning for performance
+
+- Partitions: start with `2 × cores` (default). Increase gradually if reads are underutilized; too high can add overhead.
+- Batch size: 2k–10k usually works well. Larger batches reduce cursor roundtrips, but can raise latency/memory.
+- Queue size: increase to 256–512MB to reduce backpressure on readers for fast disks.
+- Compression: use `:zstd` for good ratio; for max speed, try `:gzip` with low level.
+- Rotation size: larger (512MB–1GB) reduces finalize overhead for many parts.
+- Read preference: offload to secondaries or tagged analytics nodes when available.
+
+Benchmarking (optional):
+
+```bash
+# 1M docs benchmark with tunables
+BENCH=1 BENCH_PARTITIONS=16 BENCH_BATCH_SIZE=8000 BENCH_QUEUE_MB=512 BENCH_ROTATE_MB=512 BENCH_COMPRESSION=gzip \
+  bundle exec rspec spec/benchmark_perf_spec.rb --format doc
+```
+
 ### Read preference and node pinning
 
 You can direct reads to non-primary members or specific tagged nodes in a replica set (e.g., MongoDB Atlas analytics nodes) via `read_preference`.
@@ -169,11 +186,14 @@ bundle exec bin/purplelight \
 
 ### Quick Benchmark
 ```
-> BENCH=1 bundle exec rspec spec/benchmark_perf_spec.rb --format doc
+% bash -lc 'BENCH=1 BENCH_PARTITIONS=16 BENCH_BATCH_SIZE=8000 BENCH_QUEUE_MB=512 BENCH_ROTATE_MB=512 BENCH_COMPRESSION=gzip bundle exec rspec spec/benchmark_perf_spec.rb --format doc | cat'
+
 Performance benchmark (1M docs, gated by BENCH=1)
+W, [2025-09-03T16:10:40.437304 #33546]  WARN -- : MONGODB | Error checking 127.0.0.1:27018: Mongo::Error::SocketError: Errno::ECONNREFUSED: Connection refused - connect(2) for 127.0.0.1:27018 (for 127.0.0.1:27018 (no TLS)) (on 127.0.0.1:27018)
 Benchmark results:
-  Inserted: 1000000 docs in 12.54s
-  Exported: 1000000 docs in 12.58s
-  Parts:    1, Bytes: 10744410
-  Throughput: 79487.72 docs/s, 0.81 MB/s
+  Inserted: 1000000 docs in 8.16s
+  Exported: 1000000 docs in 8.21s
+  Parts:    1, Bytes: 10646279
+  Throughput: 121729.17 docs/s, 1.24 MB/s
+  Settings: partitions=16, batch_size=8000, queue_mb=512, rotate_mb=512, compression=gzip
 ```
