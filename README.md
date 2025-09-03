@@ -94,10 +94,10 @@ bundle exec bin/purplelight \
 
 ```mermaid
 flowchart LR
-  A[Partition Planner] -->|filters/ranges| B{{Reader Pool (threads)}}
-  B -->|batches of docs| C[Byte-Bounded Queue]
-  C --> D{{Serializer}}
-  D -->|JSONL/CSV/Parquet| E[Sink w/ size-based rotation]
+  A[Partition planner] -->|filters/ranges| B[Reader pool (threads)]
+  B -->|batches| C[Byte-bounded queue]
+  C --> D[Serializer]
+  D -->|JSONL/CSV/Parquet| E[Sink with size-based rotation]
   E --> F[Parts + Manifest]
 
   subgraph Concurrency
