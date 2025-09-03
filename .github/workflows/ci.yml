@@ -20,6 +20,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Apache Arrow (Ubuntu)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y -V ca-certificates lsb-release wget gnupg
+          DIST=$(lsb_release -cs)
+          wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-$DIST.deb -O apache-arrow-apt-source.deb
+          sudo apt install -y ./apache-arrow-apt-source.deb
+          sudo apt-get update -y
+          sudo apt-get install -y -V libarrow-dev=21.* libarrow-glib-dev=21.* libparquet-dev=21.* libparquet-glib-dev=21.*
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -41,6 +52,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install Apache Arrow (Homebrew)
+        run: |
+          brew update
+          brew install apache-arrow apache-arrow-glib
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
