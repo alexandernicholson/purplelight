@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'oj'
+require 'json'
 require 'zlib'
 require 'fileutils'
 
@@ -44,7 +44,7 @@ module Purplelight
       buffer = if array_of_docs.first.is_a?(String)
                  array_of_docs.join
                else
-                 array_of_docs.map { |doc| "#{Oj.dump(doc, mode: :compat)}\n" }.join
+                 array_of_docs.map { |doc| "#{JSON.generate(doc)}\n" }.join
                end
       rows = array_of_docs.size
       write_buffer(buffer)

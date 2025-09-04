@@ -203,12 +203,12 @@ module Purplelight
           last_id = doc['_id']
           doc = @mapper.call(doc) if @mapper
           if encode_lines
-            line = "#{Oj.dump(doc, mode: :compat)}\n"
+            line = "#{JSON.generate(doc)}\n"
             bytes = line.bytesize
             buffer << line
           else
             # For CSV/Parquet keep raw docs to allow schema/row building
-            bytes = (Oj.dump(doc, mode: :compat).bytesize + 1)
+            bytes = (JSON.generate(doc).bytesize + 1)
             buffer << doc
           end
           buffer_bytes += bytes

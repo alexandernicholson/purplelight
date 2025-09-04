@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'csv'
-require 'oj'
+require 'json'
 require 'zlib'
 require 'fileutils'
 
@@ -173,7 +173,7 @@ module Purplelight
       val = doc[key] || doc[key.to_sym]
       case val
       when Hash, Array
-        Oj.dump(val, mode: :compat)
+        JSON.generate(val)
       else
         val
       end

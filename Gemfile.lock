@@ -5,7 +5,6 @@ PATH
       csv
       logger (>= 1.6)
       mongo (>= 2.19)
-      oj (>= 3.16)
 
 GEM
   remote: https://rubygems.org/
@@ -34,10 +33,6 @@ GEM
       base64
       bson (>= 4.14.1, < 6.0.0)
     native-package-installer (1.1.9)
-    oj (3.16.11)
-      bigdecimal (>= 3.0)
-      ostruct (>= 0.2)
-    ostruct (0.6.3)
     parallel (1.27.0)
     parser (3.3.9.0)
       ast (~> 2.4.1)
