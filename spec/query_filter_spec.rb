@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'tmpdir'
 require 'json'
@@ -11,15 +13,13 @@ RSpec.describe 'Query filtering' do
   def wait_for_mongo(url, timeout: 60)
     start = Time.now
     loop do
-      begin
-        client = Mongo::Client.new(url, server_api: { version: '1' })
-        client.database.command(hello: 1)
-        return true
-      rescue => _e
-        break if (Time.now - start) > timeout
+      client = Mongo::Client.new(url, server_api: { version: '1' })
+      client.database.command(hello: 1)
+      return true
+    rescue StandardError => _e
+      break if (Time.now - start) > timeout
 
-        sleep 1
-      end
+      sleep 1
     end
     false
   end
@@ -29,17 +29,14 @@ RSpec.describe 'Query filtering' do
       container = nil
       mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
       begin
-        if ENV['MONGO_URL']
-          raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
-        else
-          if docker?
-            container = "pl-mongo-query-#{Time.now.to_i}"
-            system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
-            raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
-          else
-            raise 'Mongo not available (no MONGO_URL and no Docker)'
-          end
+        unless ENV['MONGO_URL']
+          raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
+          container = "pl-mongo-query-#{Time.now.to_i}"
+          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+
         end
+        raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
 
         client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:qtest]

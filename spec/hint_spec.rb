@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'tmpdir'
 require 'json'
@@ -10,15 +12,13 @@ RSpec.describe 'Hint usage' do
   def wait_for_mongo(url, timeout: 60)
     start = Time.now
     loop do
-      begin
-        client = Mongo::Client.new(url, server_api: { version: '1' })
-        client.database.command(hello: 1)
-        return true
-      rescue => _e
-        break if (Time.now - start) > timeout
+      client = Mongo::Client.new(url, server_api: { version: '1' })
+      client.database.command(hello: 1)
+      return true
+    rescue StandardError => _e
+      break if (Time.now - start) > timeout
 
-        sleep 1
-      end
+      sleep 1
     end
     false
   end
@@ -27,21 +27,22 @@ RSpec.describe 'Hint usage' do
     mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
     container = nil
     begin
-      if ENV['MONGO_URL']
-        raise 'Mongo not reachable' unless wait_for_mongo(mongo_url)
-      else
-        if docker?
-          container = "pl-mongo-hint-#{Time.now.to_i}"
-          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
-          raise 'Mongo not reachable' unless wait_for_mongo(mongo_url)
-        else
-          raise 'Mongo not available (no MONGO_URL and no Docker)'
-        end
+      unless ENV['MONGO_URL']
+        raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
+        container = "pl-mongo-hint-#{Time.now.to_i}"
+        system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+
       end
+      raise 'Mongo not reachable' unless wait_for_mongo(mongo_url)
 
       client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
       coll = client[:hints]
-      coll.drop_indexes rescue nil
+      begin
+        coll.drop_indexes
+      rescue StandardError
+        nil
+      end
       coll.insert_many((1..1000).map { |i| { _id: BSON::ObjectId.new, created_at: Time.at(i), n: i } })
       coll.indexes.create_one({ created_at: 1 })
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'optparse'
 require 'json'
@@ -20,7 +21,7 @@ options = {
 }
 
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: purplelight snapshot [options]"
+  opts.banner = 'Usage: purplelight snapshot [options]'
 
   opts.on('-u', '--uri URI', 'MongoDB connection URI (required)') { |v| options[:uri] = v }
   opts.on('-d', '--db NAME', 'Database name (required)') { |v| options[:db] = v }
@@ -30,9 +31,9 @@ parser = OptionParser.new do |opts|
   opts.on('--compression NAME', 'Compression: zstd|gzip|none') { |v| options[:compression] = v.to_sym }
   opts.on('--partitions N', Integer, 'Number of partitions') { |v| options[:partitions] = v }
   opts.on('--batch-size N', Integer, 'Mongo batch size (default 2000)') { |v| options[:batch_size] = v }
-  opts.on('--by-size BYTES', Integer, 'Shard by size (bytes); default 268435456') { |v|
+  opts.on('--by-size BYTES', Integer, 'Shard by size (bytes); default 268435456') do |v|
     options[:sharding] = { mode: :by_size, part_bytes: v }
-  }
+  end
   opts.on('--single-file', 'Write a single output file') { options[:sharding] = { mode: :single_file } }
   opts.on('--prefix NAME', 'Output file prefix') do |v|
     options[:sharding] ||= {}
@@ -40,9 +41,9 @@ parser = OptionParser.new do |opts|
   end
   opts.on('-q', '--query JSON', 'Filter query as JSON') { |v| options[:query] = JSON.parse(v) }
   opts.on('--read-preference MODE',
-          'Read preference mode: primary|primary_preferred|secondary|secondary_preferred|nearest') { |v|
+          'Read preference mode: primary|primary_preferred|secondary|secondary_preferred|nearest') do |v|
     options[:read_preference] = v.to_sym
-  }
+  end
   opts.on('--read-tags TAGS',
           'Comma-separated key=value list to target tagged nodes (e.g., nodeType=ANALYTICS,region=EAST)') do |v|
     tags = {}
@@ -74,16 +75,16 @@ rescue OptionParser::ParseError => e
 end
 
 %i[uri db collection output].each do |k|
-  if options[k].nil? || options[k].to_s.empty?
-    warn "Missing required option: --#{k}"
-    warn parser
-    exit 1
-  end
+  next unless options[k].nil? || options[k].to_s.empty?
+
+  warn "Missing required option: --#{k}"
+  warn parser
+  exit 1
 end
 
 effective_read = nil
 if options[:read_tags]
-  effective_read = { mode: (options[:read_preference] || :secondary), tag_sets: [options[:read_tags]] }
+  effective_read = { mode: options[:read_preference] || :secondary, tag_sets: [options[:read_tags]] }
 elsif options[:read_preference]
   effective_read = { mode: options[:read_preference] }
 end
@@ -108,7 +109,7 @@ ok = Purplelight.snapshot(
   sharding: options[:sharding],
   read_preference: effective_read || options[:read_preference],
   resume: { enabled: true },
-  on_progress: ->(s) { $stderr.puts("progress: #{s.to_json}") }
+  on_progress: ->(s) { warn("progress: #{s.to_json}") }
 )
 
 exit(ok ? 0 : 1)

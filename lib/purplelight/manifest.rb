@@ -43,7 +43,7 @@ module Purplelight
     def save!
       dir = File.dirname(path)
       FileUtils.mkdir_p(dir) unless Dir.exist?(dir)
-      tmp = path + '.tmp'
+      tmp = "#{path}.tmp"
       File.open(tmp, 'w') { |f| f.write(JSON.pretty_generate(@data)) }
       FileUtils.mv(tmp, path)
     end
@@ -67,9 +67,9 @@ module Purplelight
     def ensure_partitions!(count)
       @mutex.synchronize do
         if @data['partitions'].empty?
-          @data['partitions'] = Array.new(count) { |i|
+          @data['partitions'] = Array.new(count) do |i|
             { 'index' => i, 'last_id_exclusive' => nil, 'completed' => false }
-          }
+          end
           save!
         end
       end
@@ -131,10 +131,10 @@ module Purplelight
 
     def save_maybe!(interval_seconds: 2.0)
       now = Time.now
-      if (now - @last_save_at) >= interval_seconds
-        save!
-        @last_save_at = now
-      end
+      return unless (now - @last_save_at) >= interval_seconds
+
+      save!
+      @last_save_at = now
     end
   end
 end

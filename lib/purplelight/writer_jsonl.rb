@@ -32,21 +32,20 @@ module Purplelight
       @closed = false
 
       @effective_compression = determine_effective_compression(@compression)
-      if @effective_compression.to_s != @compression.to_s
-        @logger&.warn("requested compression '#{@compression}' not available; using '#{@effective_compression}'")
-      end
+      return unless @effective_compression.to_s != @compression.to_s
+
+      @logger&.warn("requested compression '#{@compression}' not available; using '#{@effective_compression}'")
     end
 
     def write_many(array_of_docs)
       ensure_open!
       # If upstream already produced newline-terminated strings, join fast.
-      if array_of_docs.first.is_a?(String)
-        buffer = array_of_docs.join
-        rows = array_of_docs.size
-      else
-        buffer = array_of_docs.map { |doc| Oj.dump(doc, mode: :compat) + "\n" }.join
-        rows = array_of_docs.size
-      end
+      buffer = if array_of_docs.first.is_a?(String)
+                 array_of_docs.join
+               else
+                 array_of_docs.map { |doc| "#{Oj.dump(doc, mode: :compat)}\n" }.join
+               end
+      rows = array_of_docs.size
       write_buffer(buffer)
       @rows_written += rows
       @manifest&.add_progress_to_part!(index: @part_index, rows_delta: rows, bytes_delta: buffer.bytesize)
@@ -89,17 +88,17 @@ module Purplelight
         if defined?(ZSTDS)
           # ZSTDS::Writer supports IO-like interface
           level = @compression_level || 3
-          return ZSTDS::Writer.open(raw, level: level)
+          ZSTDS::Writer.open(raw, level: level)
         else
-          @logger&.warn("zstd gem not loaded; this should have been handled earlier")
+          @logger&.warn('zstd gem not loaded; this should have been handled earlier')
           level = @compression_level || Zlib::DEFAULT_COMPRESSION
-          return Zlib::GzipWriter.new(raw, level)
+          Zlib::GzipWriter.new(raw, level)
         end
       when 'gzip'
         level = @compression_level || 1
-        return Zlib::GzipWriter.new(raw, level)
+        Zlib::GzipWriter.new(raw, level)
       when 'none'
-        return raw
+        raw
       else
         raise ArgumentError, "unknown compression: #{@compression}"
       end
@@ -129,22 +128,22 @@ module Purplelight
 
     def next_part_path
       ext = 'jsonl'
-      filename = format("%s-part-%06d.%s", @prefix, @file_seq, ext)
-      filename += ".zst" if @effective_compression.to_s == 'zstd'
-      filename += ".gz" if @effective_compression.to_s == 'gzip'
+      filename = format('%s-part-%06d.%s', @prefix, @file_seq, ext)
+      filename += '.zst' if @effective_compression.to_s == 'zstd'
+      filename += '.gz' if @effective_compression.to_s == 'gzip'
       File.join(@directory, filename)
     end
 
     def determine_effective_compression(requested)
       case requested.to_s
       when 'zstd'
-        return (defined?(ZSTDS) ? :zstd : :gzip)
+        (defined?(ZSTDS) ? :zstd : :gzip)
       when 'gzip'
-        return :gzip
+        :gzip
       when 'none'
-        return :none
+        :none
       else
-        return :gzip
+        :gzip
       end
     end
   end

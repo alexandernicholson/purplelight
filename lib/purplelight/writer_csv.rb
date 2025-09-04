@@ -36,9 +36,9 @@ module Purplelight
       @closed = false
 
       @effective_compression = determine_effective_compression(@compression)
-      if @effective_compression.to_s != @compression.to_s
-        @logger&.warn("requested compression '#{@compression}' not available; using '#{@effective_compression}'")
-      end
+      return unless @effective_compression.to_s != @compression.to_s
+
+      @logger&.warn("requested compression '#{@compression}' not available; using '#{@effective_compression}'")
     end
 
     def write_many(array_of_docs)
@@ -77,9 +77,7 @@ module Purplelight
     def close
       return if @closed
 
-      if @csv
-        @csv.flush
-      end
+      @csv&.flush
       if @io
         finalize_current_part!
         @io.close
@@ -105,16 +103,15 @@ module Purplelight
     def build_compressed_io(raw)
       case @effective_compression.to_s
       when 'zstd'
-        if defined?(ZSTDS)
-          return ZSTDS::Writer.open(raw, level: 10)
-        else
-          @logger&.warn("zstd gem not loaded; using gzip")
-          return Zlib::GzipWriter.new(raw)
-        end
+        return ZSTDS::Writer.open(raw, level: 10) if defined?(ZSTDS)
+
+        @logger&.warn('zstd gem not loaded; using gzip')
+        Zlib::GzipWriter.new(raw)
+
       when 'gzip'
-        return Zlib::GzipWriter.new(raw)
+        Zlib::GzipWriter.new(raw)
       when 'none'
-        return raw
+        raw
       else
         raise ArgumentError, "unknown compression: #{@effective_compression}"
       end
@@ -138,26 +135,26 @@ module Purplelight
 
     def next_part_path
       ext = 'csv'
-      if @single_file
-        filename = format("%s.%s", @prefix, ext)
-      else
-        filename = format("%s-part-%06d.%s", @prefix, @file_seq, ext)
-      end
-      filename += ".zst" if @effective_compression.to_s == 'zstd'
-      filename += ".gz" if @effective_compression.to_s == 'gzip'
+      filename = if @single_file
+                   format('%s.%s', @prefix, ext)
+                 else
+                   format('%s-part-%06d.%s', @prefix, @file_seq, ext)
+                 end
+      filename += '.zst' if @effective_compression.to_s == 'zstd'
+      filename += '.gz' if @effective_compression.to_s == 'gzip'
       File.join(@directory, filename)
     end
 
     def determine_effective_compression(requested)
       case requested.to_s
       when 'zstd'
-        return (defined?(ZSTDS) ? :zstd : :gzip)
+        (defined?(ZSTDS) ? :zstd : :gzip)
       when 'gzip'
-        return :gzip
+        :gzip
       when 'none'
-        return :none
+        :none
       else
-        return :gzip
+        :gzip
       end
     end
 

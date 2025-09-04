@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'tmpdir'
 require 'json'
@@ -48,13 +50,17 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         export_dir = dir
         prefix = 'bench_items'
         t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        partitions = (ENV['BENCH_PARTITIONS'] && ENV['BENCH_PARTITIONS'].to_i > 0) ? ENV['BENCH_PARTITIONS'].to_i : [
-          Etc.respond_to?(:nprocessors) ? Etc.nprocessors * 2 : 4, 32
-        ].min
-        batch_size = (ENV['BENCH_BATCH_SIZE'] && ENV['BENCH_BATCH_SIZE'].to_i > 0) ? ENV['BENCH_BATCH_SIZE'].to_i : 5000
-        queue_mb = (ENV['BENCH_QUEUE_MB'] && ENV['BENCH_QUEUE_MB'].to_i > 0) ? ENV['BENCH_QUEUE_MB'].to_i : 256
-        rotate_mb = (ENV['BENCH_ROTATE_MB'] && ENV['BENCH_ROTATE_MB'].to_i > 0) ? ENV['BENCH_ROTATE_MB'].to_i : 512
-        compression = (ENV['BENCH_COMPRESSION'] && !ENV['BENCH_COMPRESSION'].empty?) ? ENV['BENCH_COMPRESSION'].to_sym : :gzip
+        partitions = if ENV['BENCH_PARTITIONS'] && ENV['BENCH_PARTITIONS'].to_i > 0
+                       ENV['BENCH_PARTITIONS'].to_i
+                     else
+                       [
+                         Etc.respond_to?(:nprocessors) ? Etc.nprocessors * 2 : 4, 32
+                       ].min
+                     end
+        batch_size = ENV['BENCH_BATCH_SIZE'] && ENV['BENCH_BATCH_SIZE'].to_i > 0 ? ENV['BENCH_BATCH_SIZE'].to_i : 5000
+        queue_mb = ENV['BENCH_QUEUE_MB'] && ENV['BENCH_QUEUE_MB'].to_i > 0 ? ENV['BENCH_QUEUE_MB'].to_i : 256
+        rotate_mb = ENV['BENCH_ROTATE_MB'] && ENV['BENCH_ROTATE_MB'].to_i > 0 ? ENV['BENCH_ROTATE_MB'].to_i : 512
+        compression = ENV['BENCH_COMPRESSION'] && !ENV['BENCH_COMPRESSION'].empty? ? ENV['BENCH_COMPRESSION'].to_sym : :gzip
         Purplelight.snapshot(
           client: db,
           collection: :items,
@@ -81,7 +87,7 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         docs_per_sec = (rows / elapsed).round(2)
         mb_per_sec = (bytes.to_f / (1024 * 1024) / elapsed).round(2)
 
-        puts "Benchmark results:"
+        puts 'Benchmark results:'
         puts "  Inserted: #{inserted} docs in #{insert_elapsed.round(2)}s"
         puts "  Exported: #{rows} docs in #{elapsed.round(2)}s"
         puts "  Parts:    #{parts.size}, Bytes: #{bytes}"

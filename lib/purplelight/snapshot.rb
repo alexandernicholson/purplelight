@@ -23,7 +23,7 @@ module Purplelight
       read_concern: { level: :majority },
       read_preference: :primary,
       no_cursor_timeout: true
-    }
+    }.freeze
 
     def self.snapshot(**options)
       new(**options).run
@@ -74,7 +74,7 @@ module Purplelight
                        m = Manifest.new(path: manifest_path)
                      else
                        raise IncompatibleResumeError,
-                             "existing manifest incompatible with request; pass overwrite_incompatible: true to reset"
+                             'existing manifest incompatible with request; pass overwrite_incompatible: true to reset'
                      end
                    end
                    m
@@ -100,11 +100,11 @@ module Purplelight
                  WriterJSONL.new(directory: dir, prefix: prefix, compression: @compression,
                                  rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest)
                when :csv
-                 single_file = (@sharding && @sharding[:mode].to_s == 'single_file')
+                 single_file = @sharding && @sharding[:mode].to_s == 'single_file'
                  WriterCSV.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes,
                                logger: @logger, manifest: manifest, single_file: single_file)
                when :parquet
-                 single_file = (@sharding && @sharding[:mode].to_s == 'single_file')
+                 single_file = @sharding && @sharding[:mode].to_s == 'single_file'
                  WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger,
                                    manifest: manifest, single_file: single_file)
                else
@@ -131,7 +131,7 @@ module Purplelight
       end
 
       progress_thread = Thread.new do
-        last = Time.now
+        Time.now
         loop do
           sleep 2
           break unless @running
@@ -151,8 +151,8 @@ module Purplelight
 
     private
 
-    def resolve_output(output, format)
-      if File.directory?(output) || output.end_with?("/")
+    def resolve_output(output, _format)
+      if File.directory?(output) || output.end_with?('/')
         dir = output
         prefix = @sharding[:prefix] || @collection.name
       else
@@ -200,7 +200,7 @@ module Purplelight
           last_id = doc['_id']
           doc = @mapper.call(doc) if @mapper
           if encode_lines
-            line = Oj.dump(doc, mode: :compat) + "\n"
+            line = "#{Oj.dump(doc, mode: :compat)}\n"
             bytes = line.bytesize
             buffer << line
           else
@@ -209,12 +209,12 @@ module Purplelight
             buffer << doc
           end
           buffer_bytes += bytes
-          if buffer.length >= batch_size || buffer_bytes >= 1_000_000
-            queue.push(buffer, bytes: buffer_bytes)
-            manifest.update_partition_checkpoint!(idx, last_id)
-            buffer = []
-            buffer_bytes = 0
-          end
+          next unless buffer.length >= batch_size || buffer_bytes >= 1_000_000
+
+          queue.push(buffer, bytes: buffer_bytes)
+          manifest.update_partition_checkpoint!(idx, last_id)
+          buffer = []
+          buffer_bytes = 0
         end
         unless buffer.empty?
           queue.push(buffer, bytes: buffer_bytes)
@@ -223,7 +223,7 @@ module Purplelight
           buffer_bytes = 0
         end
         manifest.mark_partition_complete!(idx)
-      rescue => e
+      rescue StandardError => e
         # Re-raise to fail the thread; could implement retry/backoff
         raise e
       end

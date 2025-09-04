@@ -42,7 +42,7 @@ module Purplelight
       return if @closed
 
       ensure_open!
-      if !@buffer_docs.empty?
+      unless @buffer_docs.empty?
         table = build_table(@buffer_docs)
         write_table(table, @writer_path, append: false)
       end
@@ -53,9 +53,9 @@ module Purplelight
     private
 
     def ensure_dependencies!
-      unless defined?(Arrow) && defined?(Parquet)
-        raise ArgumentError, "Parquet support requires gems: red-arrow and red-parquet. Add them to your Gemfile."
-      end
+      return if defined?(Arrow) && defined?(Parquet)
+
+      raise ArgumentError, 'Parquet support requires gems: red-arrow and red-parquet. Add them to your Gemfile.'
     end
 
     def reset_buffers
@@ -98,7 +98,7 @@ module Purplelight
         writer.close
         return
       end
-      raise "Parquet writer not available in this environment"
+      raise 'Parquet writer not available in this environment'
     end
 
     def finalize_current_part!
@@ -110,9 +110,9 @@ module Purplelight
     def next_part_path
       ext = 'parquet'
       filename = if @single_file
-                   format("%s.%s", @prefix, ext)
+                   format('%s.%s', @prefix, ext)
                  else
-                   format("%s-part-%06d.%s", @prefix, @file_seq, ext)
+                   format('%s-part-%06d.%s', @prefix, @file_seq, ext)
                  end
       File.join(@directory, filename)
     end
@@ -120,7 +120,7 @@ module Purplelight
     def infer_columns(docs)
       keys = {}
       docs.each do |d|
-        d.keys.each { |k| keys[k.to_s] = true }
+        d.each_key { |k| keys[k.to_s] = true }
       end
       keys.keys.sort
     end
@@ -129,10 +129,8 @@ module Purplelight
       val = doc[key] || doc[key.to_sym]
       case val
       when Time
-        val
-      else
-        val
       end
+      val
     end
   end
 end

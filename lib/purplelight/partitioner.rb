@@ -20,9 +20,7 @@ module Purplelight
       cursor = base_query.projection(_id: 1).batch_size(1_000).no_cursor_timeout
       i = 0
       cursor.each do |doc|
-        if (i % step).zero?
-          boundaries << doc['_id']
-        end
+        boundaries << doc['_id'] if (i % step).zero?
         i += 1
         break if boundaries.size >= partitions
       end
@@ -30,7 +28,7 @@ module Purplelight
       ranges = []
       prev = nil
       boundaries.each_with_index do |b, idx|
-        if idx == 0
+        if idx.zero?
           prev = nil
           next
         end

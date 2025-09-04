@@ -1,4 +1,6 @@
-source "https://rubygems.org"
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
 
 git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
@@ -12,8 +14,8 @@ end
 
 group :parquet do
   # Optional: Apache Arrow + Parquet support
-  gem "red-arrow", ">= 21.0"
-  gem "red-parquet", ">= 21.0"
+  gem 'red-arrow', '>= 21.0'
+  gem 'red-parquet', '>= 21.0'
 end
 
 gem 'rubocop', require: false
