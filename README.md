@@ -9,7 +9,7 @@ Purplelight is published on RubyGems: [purplelight on RubyGems](https://rubygems
 Add to your Gemfile:
 
 ```ruby
-gem 'purplelight', '~> 0.1.1'
+gem 'purplelight', '~> 0.1.2'
 ```
 
 Or install directly:
@@ -38,6 +38,60 @@ Purplelight.snapshot(
   sharding: { mode: :by_size, part_bytes: 256 * 1024 * 1024, prefix: 'users' },
   resume: { enabled: true },
   on_progress: ->(s) { puts s.inspect }
+)
+```
+
+### Filtering with `query`
+
+`query` is passed directly to MongoDB as the filter for the collection read. Use standard MongoDB query operators.
+
+Ruby examples:
+
+```ruby
+# Equality
+query: { status: 'active' }
+
+# Ranges
+query: { created_at: { '$gte' => Time.parse('2025-01-01'), '$lt' => Time.parse('2025-02-01') } }
+
+# $in / $nin
+query: { type: { '$in' => %w[user admin] } }
+
+# Nested fields (dot-notation also supported in Mongo)
+query: { 'profile.country' => 'US' }
+
+# By ObjectId boundary (works great with _id partitions)
+query: { _id: { '$gt' => BSON::ObjectId.from_time(Time.utc(2024, 1, 1)) } }
+```
+
+CLI examples (JSON):
+
+```bash
+# Equality
+--query '{"status":"active"}'
+
+# Date/time range (ISO8601 strings your app can parse downstream)
+--query '{"created_at":{"$gte":"2025-01-01T00:00:00Z","$lt":"2025-02-01T00:00:00Z"}}'
+
+# Nested field
+--query '{"profile.country":"US"}'
+
+# IN list
+--query '{"type":{"$in":["user","admin"]}}'
+```
+
+Notes:
+- Ensure values are serializable; when using Ruby, you can pass native `Time`, `BSON::ObjectId`, etc.
+- Consider adding an appropriate index to match your `query` and pass `hint:` to force indexed scans when needed:
+
+```ruby
+Purplelight.snapshot(
+  client: client,
+  collection: 'events',
+  output: '/data/exports',
+  format: :jsonl,
+  query: { created_at: { '$gte' => Time.parse('2025-01-01') } },
+  hint: { created_at: 1 }
 )
 ```
 

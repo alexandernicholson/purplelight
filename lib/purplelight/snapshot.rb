@@ -81,7 +81,7 @@ module Purplelight
                  end
 
       manifest.configure!(collection: @collection.name, format: @format, compression: @compression, query_digest: query_digest, options: {
-        partitions: @partitions, batch_size: @batch_size, rotate_bytes: @rotate_bytes
+        partitions: @partitions, batch_size: @batch_size, rotate_bytes: @rotate_bytes, hint: @hint
       })
       manifest.ensure_partitions!(@partitions)
 
@@ -159,7 +159,7 @@ module Purplelight
     def read_partition(idx:, filter_spec:, queue:, batch_size:, manifest:)
       filter = filter_spec[:filter]
       sort = filter_spec[:sort] || { _id: 1 }
-      hint = filter_spec[:hint] || { _id: 1 }
+      hint = @hint || filter_spec[:hint] || { _id: 1 }
 
       # Resume from checkpoint if present
       checkpoint = manifest.partitions[idx] && manifest.partitions[idx]['last_id_exclusive']

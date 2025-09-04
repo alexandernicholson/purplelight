@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    purplelight (0.1.1)
+    purplelight (0.1.2)
       csv
       logger (>= 1.6)
       mongo (>= 2.19)
