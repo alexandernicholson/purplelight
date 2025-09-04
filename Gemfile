@@ -16,4 +16,4 @@ group :parquet do
   gem "red-parquet", ">= 21.0"
 end
 
-
+gem 'rubocop', require: false

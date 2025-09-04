@@ -12,5 +12,3 @@ module Purplelight
     Snapshot.snapshot(**options)
   end
 end
-
-

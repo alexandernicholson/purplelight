@@ -19,10 +19,11 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         60.times do
           ok = system("docker exec #{container} mongosh --eval 'db.runCommand({hello:1})' > /dev/null 2>&1")
           break if ok
+
           sleep 1
         end
 
-        client = Mongo::Client.new('mongodb://127.0.0.1:27018', server_api: {version: '1'})
+        client = Mongo::Client.new('mongodb://127.0.0.1:27018', server_api: { version: '1' })
         db = client.use('bench')
         coll = db[:items]
 
@@ -47,7 +48,9 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         export_dir = dir
         prefix = 'bench_items'
         t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        partitions = (ENV['BENCH_PARTITIONS'] && ENV['BENCH_PARTITIONS'].to_i > 0) ? ENV['BENCH_PARTITIONS'].to_i : [Etc.respond_to?(:nprocessors) ? Etc.nprocessors * 2 : 4, 32].min
+        partitions = (ENV['BENCH_PARTITIONS'] && ENV['BENCH_PARTITIONS'].to_i > 0) ? ENV['BENCH_PARTITIONS'].to_i : [
+          Etc.respond_to?(:nprocessors) ? Etc.nprocessors * 2 : 4, 32
+        ].min
         batch_size = (ENV['BENCH_BATCH_SIZE'] && ENV['BENCH_BATCH_SIZE'].to_i > 0) ? ENV['BENCH_BATCH_SIZE'].to_i : 5000
         queue_mb = (ENV['BENCH_QUEUE_MB'] && ENV['BENCH_QUEUE_MB'].to_i > 0) ? ENV['BENCH_QUEUE_MB'].to_i : 256
         rotate_mb = (ENV['BENCH_ROTATE_MB'] && ENV['BENCH_ROTATE_MB'].to_i > 0) ? ENV['BENCH_ROTATE_MB'].to_i : 512
@@ -93,5 +96,3 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
     end
   end
 end
-
-

@@ -16,8 +16,7 @@ RSpec.describe 'CLI' do
   it '--dry-run with read-preference and tags prints effective JSON' do
     out = `#{bin} --dry-run --uri mongodb://localhost --db db --collection c --output /tmp --read-preference secondary --read-tags nodeType=ANALYTICS,region=EAST`
     parsed = JSON.parse(out)
-    expect(parsed['read_preference']).to eq({'mode' => 'secondary', 'tag_sets' => [{'nodeType' => 'ANALYTICS', 'region' => 'EAST'}]})
+    expect(parsed['read_preference']).to eq({ 'mode' => 'secondary',
+                                              'tag_sets' => [{ 'nodeType' => 'ANALYTICS', 'region' => 'EAST' }] })
   end
 end
-
-

@@ -6,5 +6,3 @@ RSpec.describe 'Gem interface' do
     expect(Purplelight).to respond_to(:snapshot)
   end
 end
-
-

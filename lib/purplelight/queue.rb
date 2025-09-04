@@ -15,6 +15,7 @@ module Purplelight
     def push(item, bytes:)
       @mutex.synchronize do
         raise "queue closed" if @closed
+
         while (@bytes + bytes) > @max_bytes
           @cv.wait(@mutex)
         end
@@ -30,6 +31,7 @@ module Purplelight
           if @closed
             return nil
           end
+
           @cv.wait(@mutex)
         end
         item, bytes = @queue.shift
@@ -51,5 +53,3 @@ module Purplelight
     end
   end
 end
-
-

@@ -67,7 +67,9 @@ module Purplelight
     def ensure_partitions!(count)
       @mutex.synchronize do
         if @data['partitions'].empty?
-          @data['partitions'] = Array.new(count) { |i| { 'index' => i, 'last_id_exclusive' => nil, 'completed' => false } }
+          @data['partitions'] = Array.new(count) { |i|
+            { 'index' => i, 'last_id_exclusive' => nil, 'completed' => false }
+          }
           save!
         end
       end
@@ -92,7 +94,8 @@ module Purplelight
     def open_part!(path)
       @mutex.synchronize do
         idx = @data['parts'].size
-        @data['parts'] << { 'index' => idx, 'path' => path, 'bytes' => 0, 'rows' => 0, 'complete' => false, 'checksum' => nil }
+        @data['parts'] << { 'index' => idx, 'path' => path, 'bytes' => 0, 'rows' => 0, 'complete' => false,
+                            'checksum' => nil }
         save!
         idx
       end
@@ -135,5 +138,3 @@ module Purplelight
     end
   end
 end
-
-

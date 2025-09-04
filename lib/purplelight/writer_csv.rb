@@ -14,7 +14,8 @@ module Purplelight
   class WriterCSV
     DEFAULT_ROTATE_BYTES = 256 * 1024 * 1024
 
-    def initialize(directory:, prefix:, compression: :zstd, rotate_bytes: DEFAULT_ROTATE_BYTES, logger: nil, manifest: nil, single_file: false, columns: nil, headers: true)
+    def initialize(directory:, prefix:, compression: :zstd, rotate_bytes: DEFAULT_ROTATE_BYTES, logger: nil,
+                   manifest: nil, single_file: false, columns: nil, headers: true)
       @directory = directory
       @prefix = prefix
       @compression = compression
@@ -53,6 +54,7 @@ module Purplelight
 
       array_of_docs.each do |doc|
         next if doc.is_a?(String)
+
         row = @columns.map { |k| extract_value(doc, k) }
         @csv << row
         @rows_written += 1
@@ -65,13 +67,16 @@ module Purplelight
     def rotate_if_needed
       return if @single_file
       return if @rotate_bytes.nil?
+
       raw_bytes = @io.respond_to?(:pos) ? @io.pos : @bytes_written
       return if raw_bytes < @rotate_bytes
+
       rotate!
     end
 
     def close
       return if @closed
+
       if @csv
         @csv.flush
       end
@@ -86,6 +91,7 @@ module Purplelight
 
     def ensure_open!
       return if @io
+
       FileUtils.mkdir_p(@directory)
       path = next_part_path
       @part_index = @manifest&.open_part!(path) if @manifest
@@ -116,6 +122,7 @@ module Purplelight
 
     def rotate!
       return unless @io
+
       finalize_current_part!
       @io.close
       @io = nil
@@ -176,5 +183,3 @@ module Purplelight
     end
   end
 end
-
-

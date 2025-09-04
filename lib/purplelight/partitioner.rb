@@ -80,5 +80,3 @@ module Purplelight
     end
   end
 end
-
-

@@ -5,5 +5,3 @@ RSpec.describe 'Purplelight basic loadability' do
     expect(Purplelight::VERSION).to match(/\d+\.\d+\.\d+/)
   end
 end
-
-

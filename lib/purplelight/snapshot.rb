@@ -68,11 +68,13 @@ module Purplelight
 
       manifest = if @resume && @resume[:enabled] && File.exist?(manifest_path)
                    m = Manifest.load(manifest_path)
-                   unless m.compatible_with?(collection: @collection.name, format: @format, compression: @compression, query_digest: query_digest)
+                   unless m.compatible_with?(collection: @collection.name, format: @format, compression: @compression,
+                                             query_digest: query_digest)
                      if @resume[:overwrite_incompatible]
                        m = Manifest.new(path: manifest_path)
                      else
-                       raise IncompatibleResumeError, "existing manifest incompatible with request; pass overwrite_incompatible: true to reset"
+                       raise IncompatibleResumeError,
+                             "existing manifest incompatible with request; pass overwrite_incompatible: true to reset"
                      end
                    end
                    m
@@ -81,12 +83,13 @@ module Purplelight
                  end
 
       manifest.configure!(collection: @collection.name, format: @format, compression: @compression, query_digest: query_digest, options: {
-        partitions: @partitions, batch_size: @batch_size, rotate_bytes: @rotate_bytes, hint: @hint
-      })
+                            partitions: @partitions, batch_size: @batch_size, rotate_bytes: @rotate_bytes, hint: @hint
+                          })
       manifest.ensure_partitions!(@partitions)
 
       # Plan partitions
-      partition_filters = Partitioner.object_id_partitions(collection: @collection, query: @query, partitions: @partitions)
+      partition_filters = Partitioner.object_id_partitions(collection: @collection, query: @query,
+                                                           partitions: @partitions)
 
       # Reader queue
       queue = ByteQueue.new(max_bytes: @queue_size_bytes)
@@ -94,13 +97,16 @@ module Purplelight
       # Writer
       writer = case @format
                when :jsonl
-                 WriterJSONL.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest)
+                 WriterJSONL.new(directory: dir, prefix: prefix, compression: @compression,
+                                 rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest)
                when :csv
                  single_file = (@sharding && @sharding[:mode].to_s == 'single_file')
-                 WriterCSV.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest, single_file: single_file)
+                 WriterCSV.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes,
+                               logger: @logger, manifest: manifest, single_file: single_file)
                when :parquet
                  single_file = (@sharding && @sharding[:mode].to_s == 'single_file')
-                 WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger, manifest: manifest, single_file: single_file)
+                 WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger,
+                                   manifest: manifest, single_file: single_file)
                else
                  raise ArgumentError, "format not implemented: #{@format}"
                end
@@ -117,6 +123,7 @@ module Purplelight
         loop do
           batch = queue.pop
           break if batch.nil?
+
           writer.write_many(batch)
         end
       ensure
@@ -128,6 +135,7 @@ module Purplelight
         loop do
           sleep 2
           break unless @running
+
           @on_progress&.call({ queue_bytes: queue.size_bytes })
         end
       end
@@ -222,5 +230,3 @@ module Purplelight
     end
   end
 end
-
-

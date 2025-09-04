@@ -7,5 +7,3 @@ module Purplelight
   class OutputExistsError < Error; end
   class WriterClosedError < Error; end
 end
-
-

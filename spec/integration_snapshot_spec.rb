@@ -12,11 +12,12 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
     start = Time.now
     loop do
       begin
-        client = Mongo::Client.new(url, server_api: {version: '1'})
+        client = Mongo::Client.new(url, server_api: { version: '1' })
         client.database.command(hello: 1)
         return true
       rescue => _e
         break if (Time.now - start) > timeout
+
         sleep 1
       end
     end
@@ -51,7 +52,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
           end
         end
 
-        client = Mongo::Client.new(mongo_url, server_api: {version: '1'})
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:users]
         docs = 1_000.times.map { |i| { _id: BSON::ObjectId.new, email: "user#{i}@ex.com", active: (i % 2 == 0) } }
         coll.insert_many(docs)
@@ -85,6 +86,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
             3.times do
               line = gz.gets
               break unless line
+
               puts line.strip
             end
           end
@@ -94,6 +96,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
             3.times do
               line = f.gets
               break unless line
+
               puts line.strip
             end
           end
@@ -173,5 +176,3 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
     end
   end
 end
-
-

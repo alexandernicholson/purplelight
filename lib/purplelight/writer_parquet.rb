@@ -13,7 +13,8 @@ module Purplelight
   class WriterParquet
     DEFAULT_ROW_GROUP_SIZE = 10_000
 
-    def initialize(directory:, prefix:, compression: :zstd, row_group_size: DEFAULT_ROW_GROUP_SIZE, logger: nil, manifest: nil, single_file: true, schema: nil)
+    def initialize(directory:, prefix:, compression: :zstd, row_group_size: DEFAULT_ROW_GROUP_SIZE, logger: nil,
+                   manifest: nil, single_file: true, schema: nil)
       @directory = directory
       @prefix = prefix
       @compression = compression
@@ -39,6 +40,7 @@ module Purplelight
 
     def close
       return if @closed
+
       ensure_open!
       if !@buffer_docs.empty?
         table = build_table(@buffer_docs)
@@ -64,6 +66,7 @@ module Purplelight
 
     def ensure_open!
       return if @writer_path
+
       FileUtils.mkdir_p(@directory)
       @writer_path = next_part_path
       @part_index = @manifest&.open_part!(@writer_path) if @manifest
@@ -133,5 +136,3 @@ module Purplelight
     end
   end
 end
-
-

@@ -11,11 +11,12 @@ RSpec.describe 'Hint usage' do
     start = Time.now
     loop do
       begin
-        client = Mongo::Client.new(url, server_api: {version: '1'})
+        client = Mongo::Client.new(url, server_api: { version: '1' })
         client.database.command(hello: 1)
         return true
       rescue => _e
         break if (Time.now - start) > timeout
+
         sleep 1
       end
     end
@@ -38,7 +39,7 @@ RSpec.describe 'Hint usage' do
         end
       end
 
-      client = Mongo::Client.new(mongo_url, server_api: {version: '1'})
+      client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
       coll = client[:hints]
       coll.drop_indexes rescue nil
       coll.insert_many((1..1000).map { |i| { _id: BSON::ObjectId.new, created_at: Time.at(i), n: i } })
@@ -72,5 +73,3 @@ RSpec.describe 'Hint usage' do
     end
   end
 end
-
-

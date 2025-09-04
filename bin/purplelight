@@ -30,19 +30,26 @@ parser = OptionParser.new do |opts|
   opts.on('--compression NAME', 'Compression: zstd|gzip|none') { |v| options[:compression] = v.to_sym }
   opts.on('--partitions N', Integer, 'Number of partitions') { |v| options[:partitions] = v }
   opts.on('--batch-size N', Integer, 'Mongo batch size (default 2000)') { |v| options[:batch_size] = v }
-  opts.on('--by-size BYTES', Integer, 'Shard by size (bytes); default 268435456') { |v| options[:sharding] = { mode: :by_size, part_bytes: v } }
+  opts.on('--by-size BYTES', Integer, 'Shard by size (bytes); default 268435456') { |v|
+    options[:sharding] = { mode: :by_size, part_bytes: v }
+  }
   opts.on('--single-file', 'Write a single output file') { options[:sharding] = { mode: :single_file } }
   opts.on('--prefix NAME', 'Output file prefix') do |v|
     options[:sharding] ||= {}
     options[:sharding][:prefix] = v
   end
   opts.on('-q', '--query JSON', 'Filter query as JSON') { |v| options[:query] = JSON.parse(v) }
-  opts.on('--read-preference MODE', 'Read preference mode: primary|primary_preferred|secondary|secondary_preferred|nearest') { |v| options[:read_preference] = v.to_sym }
-  opts.on('--read-tags TAGS', 'Comma-separated key=value list to target tagged nodes (e.g., nodeType=ANALYTICS,region=EAST)') do |v|
+  opts.on('--read-preference MODE',
+          'Read preference mode: primary|primary_preferred|secondary|secondary_preferred|nearest') { |v|
+    options[:read_preference] = v.to_sym
+  }
+  opts.on('--read-tags TAGS',
+          'Comma-separated key=value list to target tagged nodes (e.g., nodeType=ANALYTICS,region=EAST)') do |v|
     tags = {}
     v.split(',').each do |pair|
       k, val = pair.split('=', 2)
       next if k.nil? || val.nil?
+
       tags[k] = val
     end
     options[:read_tags] = tags unless tags.empty?
@@ -105,5 +112,3 @@ ok = Purplelight.snapshot(
 )
 
 exit(ok ? 0 : 1)
-
-

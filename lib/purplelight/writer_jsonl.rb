@@ -14,7 +14,8 @@ module Purplelight
   class WriterJSONL
     DEFAULT_ROTATE_BYTES = 256 * 1024 * 1024
 
-    def initialize(directory:, prefix:, compression: :zstd, rotate_bytes: DEFAULT_ROTATE_BYTES, logger: nil, manifest: nil, compression_level: nil)
+    def initialize(directory:, prefix:, compression: :zstd, rotate_bytes: DEFAULT_ROTATE_BYTES, logger: nil,
+                   manifest: nil, compression_level: nil)
       @directory = directory
       @prefix = prefix
       @compression = compression
@@ -54,11 +55,13 @@ module Purplelight
     def rotate_if_needed
       return if @rotate_bytes.nil?
       return if @bytes_written < @rotate_bytes
+
       rotate!
     end
 
     def close
       return if @closed
+
       if @io
         finalize_current_part!
         @io.close
@@ -70,6 +73,7 @@ module Purplelight
 
     def ensure_open!
       return if @io
+
       FileUtils.mkdir_p(@directory)
       path = next_part_path
       @part_index = @manifest&.open_part!(path) if @manifest
@@ -109,6 +113,7 @@ module Purplelight
 
     def rotate!
       return unless @io
+
       finalize_current_part!
       @io.close
       @io = nil
@@ -144,5 +149,3 @@ module Purplelight
     end
   end
 end
-
-

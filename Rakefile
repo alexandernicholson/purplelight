@@ -10,5 +10,3 @@ rescue LoadError
     sh 'echo "RSpec not installed"'
   end
 end
-
-

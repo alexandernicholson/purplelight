@@ -12,11 +12,12 @@ RSpec.describe 'Query filtering' do
     start = Time.now
     loop do
       begin
-        client = Mongo::Client.new(url, server_api: {version: '1'})
+        client = Mongo::Client.new(url, server_api: { version: '1' })
         client.database.command(hello: 1)
         return true
       rescue => _e
         break if (Time.now - start) > timeout
+
         sleep 1
       end
     end
@@ -40,13 +41,13 @@ RSpec.describe 'Query filtering' do
           end
         end
 
-        client = Mongo::Client.new(mongo_url, server_api: {version: '1'})
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:qtest]
         coll.insert_many([
-          { _id: BSON::ObjectId.new, status: 'active',  n: 1 },
-          { _id: BSON::ObjectId.new, status: 'inactive', n: 2 },
-          { _id: BSON::ObjectId.new, status: 'active',  n: 3 }
-        ])
+                           { _id: BSON::ObjectId.new, status: 'active', n: 1 },
+                           { _id: BSON::ObjectId.new, status: 'inactive', n: 2 },
+                           { _id: BSON::ObjectId.new, status: 'active', n: 3 }
+                         ])
 
         Purplelight.snapshot(
           client: client,
@@ -80,5 +81,3 @@ RSpec.describe 'Query filtering' do
     end
   end
 end
-
-
