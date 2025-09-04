@@ -12,6 +12,7 @@ require_relative 'manifest'
 require_relative 'errors'
 
 module Purplelight
+  # Snapshot orchestrates partition planning, parallel reads, and writing.
   class Snapshot
     DEFAULTS = {
       format: :jsonl,
@@ -25,8 +26,8 @@ module Purplelight
       no_cursor_timeout: true
     }.freeze
 
-    def self.snapshot(**options)
-      new(**options).run
+    def self.snapshot(...)
+      new(...).run
     end
 
     def initialize(client:, collection:, output:, format: DEFAULTS[:format], compression: DEFAULTS[:compression],
@@ -61,6 +62,7 @@ module Purplelight
       @running = true
     end
 
+    # rubocop:disable Naming/PredicateMethod
     def run
       dir, prefix = resolve_output(@output, @format)
       manifest_path = File.join(dir, "#{prefix}.manifest.json")
@@ -148,6 +150,7 @@ module Purplelight
       progress_thread.join
       true
     end
+    # rubocop:enable Naming/PredicateMethod
 
     private
 
@@ -223,9 +226,6 @@ module Purplelight
           buffer_bytes = 0
         end
         manifest.mark_partition_complete!(idx)
-      rescue StandardError => e
-        # Re-raise to fail the thread; could implement retry/backoff
-        raise e
       end
     end
   end

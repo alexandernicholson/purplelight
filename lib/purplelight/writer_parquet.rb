@@ -10,6 +10,7 @@ end
 require 'fileutils'
 
 module Purplelight
+  # WriterParquet writes Parquet files via Apache Arrow when available.
   class WriterParquet
     DEFAULT_ROW_GROUP_SIZE = 10_000
 
@@ -85,7 +86,7 @@ module Purplelight
       Arrow::Table.new(columns)
     end
 
-    def write_table(table, path, append: false)
+    def write_table(table, path, append: false) # rubocop:disable Lint/UnusedMethodArgument
       # Prefer Arrow's save with explicit parquet format; compression defaults per build.
       if table.respond_to?(:save)
         table.save(path, format: :parquet)
@@ -110,9 +111,9 @@ module Purplelight
     def next_part_path
       ext = 'parquet'
       filename = if @single_file
-                   format('%s.%s', @prefix, ext)
+                   format('%<prefix>s.%<ext>s', prefix: @prefix, ext: ext)
                  else
-                   format('%s-part-%06d.%s', @prefix, @file_seq, ext)
+                   format('%<prefix}s-part-%<seq>06d.%<ext>s', prefix: @prefix, seq: @file_seq, ext: ext)
                  end
       File.join(@directory, filename)
     end
@@ -126,11 +127,7 @@ module Purplelight
     end
 
     def extract_value(doc, key)
-      val = doc[key] || doc[key.to_sym]
-      case val
-      when Time
-      end
-      val
+      doc[key] || doc[key.to_sym]
     end
   end
 end

@@ -8,9 +8,11 @@ require 'fileutils'
 begin
   require 'zstds'
 rescue LoadError
+  # zstd not available; fallback handled later via gzip
 end
 
 module Purplelight
+  # WriterCSV writes documents to CSV files with optional compression.
   class WriterCSV
     DEFAULT_ROTATE_BYTES = 256 * 1024 * 1024
 
@@ -136,9 +138,9 @@ module Purplelight
     def next_part_path
       ext = 'csv'
       filename = if @single_file
-                   format('%s.%s', @prefix, ext)
+                   format('%<prefix>s.%<ext>s', prefix: @prefix, ext: ext)
                  else
-                   format('%s-part-%06d.%s', @prefix, @file_seq, ext)
+                   format('%<prefix>s-part-%<seq>06d.%<ext>s', prefix: @prefix, seq: @file_seq, ext: ext)
                  end
       filename += '.zst' if @effective_compression.to_s == 'zstd'
       filename += '.gz' if @effective_compression.to_s == 'gzip'
@@ -149,8 +151,6 @@ module Purplelight
       case requested.to_s
       when 'zstd'
         (defined?(ZSTDS) ? :zstd : :gzip)
-      when 'gzip'
-        :gzip
       when 'none'
         :none
       else

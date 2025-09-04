@@ -11,6 +11,7 @@ rescue LoadError
 end
 
 module Purplelight
+  # WriterJSONL writes newline-delimited JSON with optional compression.
   class WriterJSONL
     DEFAULT_ROTATE_BYTES = 256 * 1024 * 1024
 
@@ -128,7 +129,7 @@ module Purplelight
 
     def next_part_path
       ext = 'jsonl'
-      filename = format('%s-part-%06d.%s', @prefix, @file_seq, ext)
+      filename = format('%<prefix>s-part-%<seq>06d.%<ext>s', prefix: @prefix, seq: @file_seq, ext: ext)
       filename += '.zst' if @effective_compression.to_s == 'zstd'
       filename += '.gz' if @effective_compression.to_s == 'gzip'
       File.join(@directory, filename)
@@ -138,8 +139,6 @@ module Purplelight
       case requested.to_s
       when 'zstd'
         (defined?(ZSTDS) ? :zstd : :gzip)
-      when 'gzip'
-        :gzip
       when 'none'
         :none
       else

@@ -3,6 +3,11 @@
 require 'mongo'
 
 module Purplelight
+  # Partitioner builds MongoDB range filters to split work across workers.
+  #
+  # Given a Mongo collection and an optional base query, it returns N
+  # contiguous `_id` ranges that can be processed independently while
+  # maintaining ascending order. Optimized for ObjectId-based `_id`.
   class Partitioner
     # Builds contiguous _id range filters for N partitions.
     # For ObjectId _id, we sample quantiles to split into near-equal document counts.

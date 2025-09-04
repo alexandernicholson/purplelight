@@ -7,6 +7,11 @@ require 'digest'
 require 'fileutils'
 
 module Purplelight
+  # Manifest persists snapshot run metadata and progress to a JSON file.
+  #
+  # It records configuration, partition checkpoints, and per-part byte/row
+  # counts so interrupted runs can resume safely and completed runs are
+  # reproducible. Methods are thread-safe where mutation occurs.
   class Manifest
     DEFAULT_VERSION = 1
 
@@ -42,9 +47,9 @@ module Purplelight
 
     def save!
       dir = File.dirname(path)
-      FileUtils.mkdir_p(dir) unless Dir.exist?(dir)
+      FileUtils.mkdir_p(dir)
       tmp = "#{path}.tmp"
-      File.open(tmp, 'w') { |f| f.write(JSON.pretty_generate(@data)) }
+      File.write(tmp, JSON.pretty_generate(@data))
       FileUtils.mv(tmp, path)
     end
 

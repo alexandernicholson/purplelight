@@ -13,6 +13,7 @@ Gem::Specification.new do |spec|
   spec.license       = 'MIT'
 
   spec.required_ruby_version = '>= 3.2'
+  spec.metadata['rubygems_mfa_required'] = 'true'
 
   spec.metadata['homepage_uri'] = 'https://github.com/alexandernicholson/purplelight'
   spec.metadata['source_code_uri'] = 'https://github.com/alexandernicholson/purplelight'
@@ -32,7 +33,5 @@ Gem::Specification.new do |spec|
   # zstd compression is optional; if the zstd gem is not installed, we fallback to gzip.
   # Supported gems include 'ruby-zstds' (provides ZSTDS) or 'zstd-ruby'. We don't hard-depend to keep install light.
 
-  # Dev deps
-  spec.add_development_dependency 'rake', '>= 13.0'
-  spec.add_development_dependency 'rspec', '>= 3.12'
+  # Dev deps are declared in Gemfile
 end

@@ -18,4 +18,11 @@ group :parquet do
   gem 'red-parquet', '>= 21.0'
 end
 
-gem 'rubocop', require: false
+# Linting (development)
+
+# Test/dev tools
+group :development, :test do
+  gem 'rubocop', require: false
+  gem 'rspec', '>= 3.12'
+  gem 'rake', '>= 13.0'
+end
