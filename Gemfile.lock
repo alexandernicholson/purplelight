@@ -2,9 +2,9 @@ PATH
   remote: .
   specs:
     purplelight (0.1.5)
-      csv
-      logger (>= 1.6)
-      mongo (>= 2.21.3)
+      csv (~> 3.3, >= 3.3.5)
+      logger (~> 1.7, >= 1.7.0)
+      mongo (~> 2.21, >= 2.21.3)
 
 GEM
   remote: https://rubygems.org/
