@@ -8,8 +8,8 @@ gemspec
 
 group :compression do
   # Uncomment one of the following for zstd compression support
-  # gem "ruby-zstds", "~> 1.5" # Provides ZSTDS namespace
-  # gem "zstd-ruby", "~> 1.5"
+  # gem "ruby-zstds", "~> 1.3.1" # Provides ZSTDS namespace
+  gem "zstd-ruby", "~> 1.5"
 end
 
 group :parquet do

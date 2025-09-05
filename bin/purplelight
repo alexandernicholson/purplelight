@@ -40,6 +40,7 @@ parser = OptionParser.new do |opts|
     options[:sharding][:prefix] = v
   end
   opts.on('-q', '--query JSON', 'Filter query as JSON') { |v| options[:query] = JSON.parse(v) }
+  opts.on('--projection JSON', 'Projection as JSON (e.g., {"_id":1,"field":1})') { |v| options[:projection] = JSON.parse(v) }
   opts.on('--read-preference MODE',
           'Read preference mode: primary|primary_preferred|secondary|secondary_preferred|nearest') do |v|
     options[:read_preference] = v.to_sym
@@ -106,6 +107,7 @@ ok = Purplelight.snapshot(
   partitions: options[:partitions],
   batch_size: options[:batch_size],
   query: options[:query],
+  projection: options[:projection],
   sharding: options[:sharding],
   read_preference: effective_read || options[:read_preference],
   resume: { enabled: true },
