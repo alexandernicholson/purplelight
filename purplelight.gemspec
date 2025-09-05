@@ -11,11 +11,11 @@ Gem::Specification.new do |spec|
   spec.summary       = 'Snapshot MongoDB collections efficiently to JSONL/CSV/Parquet'
   spec.description   = 'High-throughput, resumable snapshots of MongoDB collections with partitioning, multi-threaded readers, and size-based sharded outputs.'
   spec.license       = 'MIT'
+  spec.homepage      = 'https://github.com/alexandernicholson/purplelight'
 
   spec.required_ruby_version = '>= 3.2'
   spec.metadata['rubygems_mfa_required'] = 'true'
 
-  spec.metadata['homepage_uri'] = 'https://github.com/alexandernicholson/purplelight'
   spec.metadata['source_code_uri'] = 'https://github.com/alexandernicholson/purplelight'
   spec.metadata['changelog_uri'] = 'https://github.com/alexandernicholson/purplelight/releases'
 
@@ -26,9 +26,9 @@ Gem::Specification.new do |spec|
   spec.executables   = ['purplelight']
 
   # Runtime deps
-  spec.add_dependency 'csv'
-  spec.add_dependency 'logger', '>= 1.6'
-  spec.add_dependency 'mongo', '>= 2.21.3'
+  spec.add_runtime_dependency 'csv', '~> 3.3', '>= 3.3.5'
+  spec.add_runtime_dependency 'logger', '~> 1.7', '>= 1.7.0'
+  spec.add_runtime_dependency 'mongo', '~> 2.21', '>= 2.21.3'
   # zstd compression is optional; if the zstd gem is not installed, we fallback to gzip.
   # Supported gems include 'ruby-zstds' (provides ZSTDS) or 'zstd-ruby'. We don't hard-depend to keep install light.
 
