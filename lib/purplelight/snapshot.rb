@@ -221,6 +221,8 @@ module Purplelight
       cursor = @collection.find(filter, opts)
 
       encode_lines = (@format == :jsonl)
+      # When JSONL, build one big string per batch to offload join cost from writer.
+      string_batch = +''
       buffer = []
       buffer_bytes = 0
       last_id = checkpoint
@@ -230,27 +232,43 @@ module Purplelight
           doc = @mapper.call(doc) if @mapper
           t_ser = telemetry.start(:serialize_time)
           if encode_lines
-            line = "#{JSON.generate(doc)}\n"
+            line = "#{JSON.fast_generate(doc)}\n"
             telemetry.finish(:serialize_time, t_ser)
             bytes = line.bytesize
-            buffer << line
+            string_batch << line
           else
             # For CSV/Parquet keep raw docs to allow schema/row building
-            bytes = (JSON.generate(doc).bytesize + 1)
+            bytes = (JSON.fast_generate(doc).bytesize + 1)
             telemetry.finish(:serialize_time, t_ser)
             buffer << doc
           end
           buffer_bytes += bytes
-          next unless buffer.length >= batch_size || buffer_bytes >= 1_000_000
+          # For JSONL, we count rows via newline accumulation; for others, use array length
+          ready = encode_lines ? (buffer_bytes >= 1_000_000 || (string_batch.length >= 1_000_000)) : (buffer.length >= batch_size || buffer_bytes >= 1_000_000)
+          next unless ready
 
           t_q = telemetry.start(:queue_wait_time)
-          queue.push(buffer, bytes: buffer_bytes)
+          if encode_lines
+            queue.push(string_batch, bytes: buffer_bytes)
+            string_batch = +''
+          else
+            queue.push(buffer, bytes: buffer_bytes)
+            buffer = []
+          end
           telemetry.finish(:queue_wait_time, t_q)
           manifest.update_partition_checkpoint!(idx, last_id)
-          buffer = []
           buffer_bytes = 0
         end
-        unless buffer.empty?
+        if encode_lines
+          unless string_batch.empty?
+            t_q = telemetry.start(:queue_wait_time)
+            queue.push(string_batch, bytes: buffer_bytes)
+            telemetry.finish(:queue_wait_time, t_q)
+            manifest.update_partition_checkpoint!(idx, last_id)
+            string_batch = +''
+            buffer_bytes = 0
+          end
+        elsif !buffer.empty?
           t_q = telemetry.start(:queue_wait_time)
           queue.push(buffer, bytes: buffer_bytes)
           telemetry.finish(:queue_wait_time, t_q)

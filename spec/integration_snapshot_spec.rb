@@ -4,6 +4,15 @@ require 'spec_helper'
 require 'tmpdir'
 require 'json'
 require 'zlib'
+require 'stringio'
+begin
+  require 'zstds'
+rescue LoadError
+end
+begin
+  require 'zstd-ruby'
+rescue LoadError
+end
 
 RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
   def docker?
@@ -85,6 +94,20 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
               puts line.strip
             end
           end
+        elsif first_part.end_with?('.zst')
+          # Prefer zstd-ruby single-shot API, fallback to ruby-zstds stream read
+          puts "Sample output lines from #{File.basename(first_part)}:"
+          if Object.const_defined?(:Zstd)
+            data = ::Zstd.decompress(File.binread(first_part))
+            StringIO.new(data).each_line.first(3).each { |line| puts line.strip }
+          elsif defined?(ZSTDS)
+            ZSTDS::Stream::Reader.open(first_part) do |zr|
+              data = zr.read
+              StringIO.new(data).each_line.first(3).each { |line| puts line.strip }
+            end
+          else
+            raise 'zstd output produced but no zstd reader is available'
+          end
         else
           File.open(first_part, 'r') do |f|
             puts "Sample output lines from #{File.basename(first_part)}:"
@@ -140,6 +163,19 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
           Zlib::GzipReader.open(csv_path) do |gz|
             puts 'CSV sample lines:'
             3.times { puts(gz.gets&.strip) }
+          end
+        elsif csv_path.end_with?('.zst')
+          puts 'CSV sample lines:'
+          if Object.const_defined?(:Zstd)
+            data = ::Zstd.decompress(File.binread(csv_path))
+            StringIO.new(data).each_line.first(3).each { |line| puts line&.strip }
+          elsif defined?(ZSTDS)
+            ZSTDS::Stream::Reader.open(csv_path) do |zr|
+              data = zr.read
+              StringIO.new(data).each_line.first(3).each { |line| puts line&.strip }
+            end
+          else
+            raise 'zstd output produced but no zstd reader is available'
           end
         else
           File.open(csv_path, 'r') do |f|

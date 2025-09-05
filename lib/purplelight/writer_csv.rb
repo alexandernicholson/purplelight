@@ -11,6 +11,12 @@ rescue LoadError
   # zstd not available; fallback handled later via gzip
 end
 
+begin
+  require 'zstd-ruby'
+rescue LoadError
+  # alternative zstd gem not available
+end
+
 module Purplelight
   # WriterCSV writes documents to CSV files with optional compression.
   class WriterCSV
@@ -24,6 +30,8 @@ module Purplelight
       @rotate_bytes = rotate_bytes
       @logger = logger
       @manifest = manifest
+      env_level = ENV['PL_ZSTD_LEVEL']&.to_i
+      @compression_level = (env_level && env_level > 0 ? env_level : nil)
       @single_file = single_file
 
       @columns = columns&.map(&:to_s)
@@ -91,6 +99,39 @@ module Purplelight
 
     private
 
+    # Minimal wrapper to count bytes written for rotate logic when
+    # underlying compressed writer doesn't expose position (e.g., zstd-ruby).
+    class CountingIO
+      def initialize(io, on_write:)
+        @io = io
+        @on_write = on_write
+      end
+
+      def write(data)
+        bytes_written = @io.write(data)
+        @on_write.call(bytes_written) if bytes_written && @on_write
+        bytes_written
+      end
+
+      # CSV calls '<<' on the underlying IO in some code paths
+      def <<(data)
+        write(data)
+      end
+
+      # CSV#flush may forward flush to underlying IO; make it a no-op if unavailable
+      def flush
+        @io.flush if @io.respond_to?(:flush)
+      end
+
+      def method_missing(method_name, *args, &block)
+        @io.send(method_name, *args, &block)
+      end
+
+      def respond_to_missing?(method_name, include_private = false)
+        @io.respond_to?(method_name, include_private)
+      end
+    end
+
     def ensure_open!
       return if @io
 
@@ -98,7 +139,8 @@ module Purplelight
       path = next_part_path
       @part_index = @manifest&.open_part!(path) if @manifest
       raw = File.open(path, 'wb')
-      @io = build_compressed_io(raw)
+      compressed = build_compressed_io(raw)
+      @io = CountingIO.new(compressed, on_write: ->(n) { @bytes_written += n })
       @csv = CSV.new(@io)
       @bytes_written = 0
       @rows_written = 0
@@ -107,7 +149,13 @@ module Purplelight
     def build_compressed_io(raw)
       case @effective_compression.to_s
       when 'zstd'
-        return ZSTDS::Writer.open(raw, level: 10) if defined?(ZSTDS)
+        if Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter)
+          level = @compression_level || 10
+          return ::Zstd::StreamWriter.new(raw, level: level)
+        elsif defined?(ZSTDS)
+          level = @compression_level || 10
+          return ZSTDS::Stream::Writer.new(raw, compression_level: level)
+        end
 
         @logger&.warn('zstd gem not loaded; using gzip')
         Zlib::GzipWriter.new(raw)
@@ -154,7 +202,7 @@ module Purplelight
     def determine_effective_compression(requested)
       case requested.to_s
       when 'zstd'
-        (defined?(ZSTDS) ? :zstd : :gzip)
+        ((defined?(ZSTDS) || (Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter))) ? :zstd : :gzip)
       when 'none'
         :none
       else

@@ -4,6 +4,15 @@ require 'spec_helper'
 require 'tmpdir'
 require 'json'
 require 'zlib'
+require 'stringio'
+begin
+  require 'zstds'
+rescue LoadError
+end
+begin
+  require 'zstd-ruby'
+rescue LoadError
+end
 
 RSpec.describe 'Query filtering' do
   def docker?
@@ -66,6 +75,18 @@ RSpec.describe 'Query filtering' do
         if path.end_with?('.gz')
           Zlib::GzipReader.open(path) do |gz|
             lines = gz.each_line.first(10)
+          end
+        elsif path.end_with?('.zst')
+          if Object.const_defined?(:Zstd)
+            data = ::Zstd.decompress(File.binread(path))
+            lines = StringIO.new(data).each_line.first(10)
+          elsif defined?(ZSTDS)
+            ZSTDS::Stream::Reader.open(path) do |zr|
+              data = zr.read
+              lines = StringIO.new(data).each_line.first(10)
+            end
+          else
+            raise 'zstd output produced but no zstd reader is available'
           end
         else
           File.open(path, 'r') { |f| lines = f.each_line.first(10) }
