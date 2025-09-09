@@ -118,7 +118,7 @@ module Purplelight
       filename = if @single_file
                    format('%<prefix>s.%<ext>s', prefix: @prefix, ext: ext)
                  else
-                   format('%<prefix}s-part-%<seq>06d.%<ext>s', prefix: @prefix, seq: @file_seq, ext: ext)
+                   format('%<prefix>s-part-%<seq>06d.%<ext>s', prefix: @prefix, seq: @file_seq, ext: ext)
                  end
       File.join(@directory, filename)
     end
