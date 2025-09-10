@@ -116,9 +116,10 @@ module Purplelight
     def next_part_path
       ext = 'parquet'
       filename = if @single_file
-                   format('%<prefix>s.%<ext>s', prefix: @prefix, ext: ext)
+                   "#{@prefix}.#{ext}"
                  else
-                   format('%<prefix}s-part-%<seq>06d.%<ext>s', prefix: @prefix, seq: @file_seq, ext: ext)
+                   seq_str = format('%06d', @file_seq)
+                   "#{@prefix}-part-#{seq_str}.#{ext}"
                  end
       File.join(@directory, filename)
     end
@@ -132,7 +133,12 @@ module Purplelight
     end
 
     def extract_value(doc, key)
-      doc[key] || doc[key.to_sym]
+      value = doc[key] || doc[key.to_sym]
+      # Normalize common MongoDB/BSON types to Parquet-friendly values
+      if defined?(BSON) && value.is_a?(BSON::ObjectId)
+        return value.to_s
+      end
+      value
     end
   end
 end
