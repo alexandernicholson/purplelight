@@ -118,8 +118,7 @@ module Purplelight
       filename = if @single_file
                    "#{@prefix}.#{ext}"
                  else
-                   seq_str = format('%06d', @file_seq)
-                   "#{@prefix}-part-#{seq_str}.#{ext}"
+                   format('%<prefix>s-part-%<seq>06d.%<ext>s', prefix: @prefix, seq: @file_seq, ext: ext)
                  end
       File.join(@directory, filename)
     end
