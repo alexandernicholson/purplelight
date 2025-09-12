@@ -27,13 +27,23 @@ module Purplelight
       max_id = collection.find(query || {}).projection(_id: 1).sort(_id: -1).limit(1).first&.dig('_id')
       return [{ filter: query || {}, sort: { _id: 1 } }] if min_id.nil? || max_id.nil?
 
-      # Create numeric-ish interpolation by sampling
-      ids = collection.find(query || {}).projection(_id: 1).sort(_id: 1).limit(partitions - 1).to_a.map { |d| d['_id'] }
-      boundaries = [min_id] + ids + [max_id]
+      # Create contiguous ranges using ascending inner boundaries.
+      # We intentionally skip the very first _id so the first range includes the smallest document.
+      inner_boundaries = collection.find(query || {})
+                                   .projection(_id: 1)
+                                   .sort(_id: 1)
+                                   .skip(1)
+                                   .limit([partitions - 1, 0].max)
+                                   .to_a
+                                   .map { |d| d['_id'] }
+
       ranges = []
-      boundaries.each_cons(2) do |a, b|
-        ranges << build_range(a, b)
+      prev = nil
+      inner_boundaries.each do |b|
+        ranges << build_range(prev, b)
+        prev = b
       end
+      ranges << build_range(prev, nil)
 
       ranges.map do |r|
         filter = query ? query.dup : {}
@@ -54,7 +64,7 @@ module Purplelight
       min_ts = min_id.respond_to?(:generation_time) ? min_id.generation_time.to_i : nil
       max_ts = max_id.respond_to?(:generation_time) ? max_id.generation_time.to_i : nil
 
-      # Fallback to cursor sampling if _id isn't an ObjectId
+      # Fallback to cursor sampling if _id isn't anObjectId
       return cursor_sampling_partitions(collection: collection, query: query, partitions: partitions) if min_ts.nil? || max_ts.nil? || max_ts <= min_ts
 
       step = [(max_ts - min_ts) / partitions, 1].max
