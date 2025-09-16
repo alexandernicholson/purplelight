@@ -9,7 +9,7 @@ Purplelight is published on RubyGems: [purplelight on RubyGems](https://rubygems
 Add to your Gemfile:
 
 ```ruby
-gem 'purplelight', '~> 0.1.8'
+gem 'purplelight', '~> 0.1.9'
 ```
 
 Or install directly:
