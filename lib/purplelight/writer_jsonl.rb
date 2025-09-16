@@ -38,6 +38,7 @@ module Purplelight
       @closed = false
 
       @effective_compression = determine_effective_compression(@compression)
+      @json_state = JSON::Ext::Generator::State.new(ascii_only: false, max_nesting: false)
       if @logger
         level_disp = @compression_level || (ENV['PL_ZSTD_LEVEL']&.to_i if @effective_compression.to_s == 'zstd')
         @logger.info("WriterJSONL using compression='#{@effective_compression}' level='#{level_disp || 'default'}'")
@@ -84,20 +85,22 @@ module Purplelight
         chunk = +''
         chunk_bytes = 0
         batch.each do |doc|
-          line = "#{JSON.fast_generate(doc)}\n"
+          json = @json_state.generate(doc)
           rows += 1
-          chunk << line
-          chunk_bytes += line.bytesize
+          bytes = json.bytesize + 1
+          chunk << json
+          chunk << "\n"
+          chunk_bytes += bytes
           next unless chunk_bytes >= chunk_threshold
 
           write_buffer(chunk)
-          total_bytes += chunk.bytesize
+          total_bytes += chunk_bytes
           chunk = +''
           chunk_bytes = 0
         end
         unless chunk.empty?
           write_buffer(chunk)
-          total_bytes += chunk.bytesize
+          total_bytes += chunk_bytes
         end
       end
 

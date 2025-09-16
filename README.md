@@ -248,14 +248,17 @@ bundle exec bin/purplelight \
 
 ### Quick Benchmark
 ```
-% bash -lc 'BENCH=1 BENCH_PARTITIONS=16 BENCH_BATCH_SIZE=8000 BENCH_QUEUE_MB=512 BENCH_ROTATE_MB=512 BENCH_COMPRESSION=gzip bundle exec rspec spec/benchmark_perf_spec.rb --format doc | cat'
+% BENCH=1 BENCH_PARTITIONS=16 BENCH_BATCH_SIZE=8000 BENCH_QUEUE_MB=512 BENCH_ROTATE_MB=512 BENCH_COMPRESSION=gzip bundle exec rspec spec/benchmark_perf_spec.rb --format doc
 
 Performance benchmark (1M docs, gated by BENCH=1)
-W, [2025-09-03T16:10:40.437304 #33546]  WARN -- : MONGODB | Error checking 127.0.0.1:27018: Mongo::Error::SocketError: Errno::ECONNREFUSED: Connection refused - connect(2) for 127.0.0.1:27018 (for 127.0.0.1:27018 (no TLS)) (on 127.0.0.1:27018)
 Benchmark results:
-  Inserted: 1000000 docs in 8.16s
-  Exported: 1000000 docs in 8.21s
-  Parts:    1, Bytes: 10646279
-  Throughput: 121729.17 docs/s, 1.24 MB/s
+  Inserted: 1000000 docs in 8.13s
+  Exported: 1000000 docs in 4.03s
+  Parts:    1, Bytes: 10625336
+  Throughput: 248241.7 docs/s, 2.52 MB/s
   Settings: partitions=16, batch_size=8000, queue_mb=512, rotate_mb=512, compression=gzip
+  exports 1,000,000 documents and reports throughput
+
+Finished in 14.02 seconds (files took 0.31974 seconds to load)
+1 example, 0 failures
 ```

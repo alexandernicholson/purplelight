@@ -244,6 +244,11 @@ module Purplelight
       string_batch = +''
       buffer = []
       buffer_bytes = 0
+      json_state = if encode_lines
+                     JSON::Ext::Generator::State.new(ascii_only: false, max_nesting: false,
+                                                     buffer_initial_length: 4_096)
+                   end
+      size_state = encode_lines ? nil : JSON::Ext::Generator::State.new(ascii_only: false, max_nesting: false)
       last_id = checkpoint
       begin
         cursor.each do |doc|
@@ -251,13 +256,15 @@ module Purplelight
           doc = @mapper.call(doc) if @mapper
           t_ser = telemetry.start(:serialize_time)
           if encode_lines
-            line = "#{JSON.fast_generate(doc)}\n"
+            json = json_state.generate(doc)
             telemetry.finish(:serialize_time, t_ser)
-            bytes = line.bytesize
-            string_batch << line
+            string_batch << json
+            string_batch << "\n"
+            bytes = json.bytesize + 1
           else
             # For CSV/Parquet keep raw docs to allow schema/row building
-            bytes = (JSON.fast_generate(doc).bytesize + 1)
+            json = size_state.generate(doc)
+            bytes = json.bytesize + 1
             telemetry.finish(:serialize_time, t_ser)
             buffer << doc
           end
