@@ -100,14 +100,14 @@ module Purplelight
                             queue_size_bytes: @queue_size_bytes,
                             rotate_bytes: @rotate_bytes,
                             hint: @hint,
-                            read_concern: @read_concern,
+                            read_concern: (@read_concern.is_a?(Hash) ? @read_concern : { level: @read_concern }),
                             no_cursor_timeout: @no_cursor_timeout,
                             writer_threads: @writer_threads,
-                            compression_level: (@compression_level || (ENV['PL_ZSTD_LEVEL']&.to_i if @compression.to_s == 'zstd') || (ENV['PL_ZSTD_LEVEL']&.to_i)),
-                            write_chunk_bytes: (@write_chunk_bytes || ENV['PL_WRITE_CHUNK_BYTES']&.to_i),
-                            parquet_row_group: (@parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i),
+                            compression_level: @compression_level || (ENV['PL_ZSTD_LEVEL']&.to_i if @compression.to_s == 'zstd') || ENV['PL_ZSTD_LEVEL']&.to_i,
+                            write_chunk_bytes: @write_chunk_bytes || ENV['PL_WRITE_CHUNK_BYTES']&.to_i,
+                            parquet_row_group: @parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i,
                             sharding: @sharding,
-                            resume_overwrite_incompatible: (@resume && @resume[:overwrite_incompatible]) ? true : false,
+                            resume_overwrite_incompatible: @resume && @resume[:overwrite_incompatible] ? true : false,
                             telemetry: @telemetry_enabled
                           })
       manifest.ensure_partitions!(@partitions)

@@ -5,16 +5,6 @@ require 'tmpdir'
 require 'json'
 require 'zlib'
 require 'stringio'
-begin
-  require 'zstds'
-rescue LoadError
-  warn 'zstds gem not available; falling back to gzip in tests'
-end
-begin
-  require 'zstd-ruby'
-rescue LoadError
-  warn 'zstd-ruby gem not available; falling back to ruby-zstds or gzip in tests'
-end
 
 RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
   def docker?

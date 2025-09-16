@@ -2,6 +2,24 @@
 
 require 'bundler/setup'
 require 'purplelight'
+require 'logger'
+
+# Silence noisy Mongo driver warnings during tests
+begin
+  Mongo::Logger.logger.level = Logger::FATAL if defined?(Mongo::Logger)
+rescue StandardError
+end
+
+# Compression backends: prefer zstd-ruby, then zstds; require at most once
+begin
+  require 'zstd-ruby'
+rescue LoadError
+  begin
+    require 'zstds'
+  rescue LoadError
+    # Neither zstd backend available; tests will fall back to gzip where needed
+  end
+end
 
 RSpec.configure do |config|
   config.expect_with :rspec do |c|

@@ -155,6 +155,10 @@ snapshot_args[:queue_size_bytes] = options[:queue_size_bytes] if options[:queue_
 snapshot_args[:rotate_bytes] = options[:rotate_bytes] if options[:rotate_bytes]
 snapshot_args[:read_concern] = options[:read_concern] if options[:read_concern]
 snapshot_args[:no_cursor_timeout] = options[:no_cursor_timeout] unless options[:no_cursor_timeout].nil?
+snapshot_args[:compression_level] = options[:compression_level] if options[:compression_level]
+snapshot_args[:writer_threads] = options[:writer_threads] if options[:writer_threads]
+snapshot_args[:write_chunk_bytes] = options[:write_chunk_bytes] if options[:write_chunk_bytes]
+snapshot_args[:parquet_row_group] = options[:parquet_row_group] if options[:parquet_row_group]
 
 # telemetry env override
 if options[:telemetry_flag]

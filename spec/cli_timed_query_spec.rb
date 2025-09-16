@@ -8,17 +8,6 @@ require 'zlib'
 require 'stringio'
 require 'time'
 
-begin
-  require 'zstds'
-rescue LoadError
-  warn 'zstds gem not available; falling back to gzip in tests'
-end
-begin
-  require 'zstd-ruby'
-rescue LoadError
-  warn 'zstd-ruby gem not available; falling back to ruby-zstds or gzip in tests'
-end
-
 RSpec.describe 'CLI timed query end-to-end' do
   def docker?
     system('docker --version > /dev/null 2>&1')

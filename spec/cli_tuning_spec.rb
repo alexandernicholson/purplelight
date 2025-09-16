@@ -20,6 +20,7 @@ RSpec.describe 'CLI tunables via flags' do
       return true
     rescue StandardError => _e
       break if (Time.now - start) > timeout
+
       sleep 1
     end
     false
@@ -35,6 +36,7 @@ RSpec.describe 'CLI tunables via flags' do
       begin
         unless ENV['MONGO_URL']
           raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
           container = "pl-mongo-cli-tuning-#{Time.now.to_i}"
           system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
         end
@@ -79,6 +81,7 @@ RSpec.describe 'CLI tunables via flags' do
       begin
         unless ENV['MONGO_URL']
           raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
           container = "pl-mongo-cli-level-#{Time.now.to_i}"
           system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
         end
@@ -128,6 +131,7 @@ RSpec.describe 'CLI tunables via flags' do
       begin
         unless ENV['MONGO_URL']
           raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
           container = "pl-mongo-cli-rowgroup-#{Time.now.to_i}"
           system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
         end
@@ -170,6 +174,7 @@ RSpec.describe 'CLI tunables via flags' do
       begin
         unless ENV['MONGO_URL']
           raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
           container = "pl-mongo-cli-read-#{Time.now.to_i}"
           system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
         end
@@ -202,6 +207,88 @@ RSpec.describe 'CLI tunables via flags' do
     end
   end
 
+  it 'applies --write-chunk-mb and records write_chunk_bytes in manifest' do
+    Dir.mktmpdir('purplelight-cli-chunk') do |dir|
+      container = nil
+      mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
+      db_name = 'db'
+      coll_name = "cli_chunk_#{Time.now.to_i}"
+      prefix = 'chunk'
+      begin
+        unless ENV['MONGO_URL']
+          raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
+          container = "pl-mongo-cli-chunk-#{Time.now.to_i}"
+          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+        end
+        raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
+
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' }).use(db_name)
+        coll = client[coll_name.to_sym]
+        coll.insert_many(10.times.map { { _id: BSON::ObjectId.new, v: 'x' * 1000 } })
+
+        cmd = [
+          bin,
+          "--uri #{mongo_url}",
+          "--db #{db_name}",
+          "--collection #{coll_name}",
+          "--output #{dir}",
+          "--prefix #{prefix}",
+          '--format jsonl',
+          '--write-chunk-mb 2'
+        ].join(' ')
+        `#{cmd}`
+        expect($CHILD_STATUS.success?).to be true
+
+        data = JSON.parse(File.read(File.join(dir, "#{prefix}.manifest.json")))
+        expect(data['options']['write_chunk_bytes']).to eq(2 * 1024 * 1024)
+      ensure
+        system("docker rm -f #{container} > /dev/null 2>&1") if container
+      end
+    end
+  end
+
+  it 'records --writer-threads in manifest (experimental)' do
+    Dir.mktmpdir('purplelight-cli-writers') do |dir|
+      container = nil
+      mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
+      db_name = 'db'
+      coll_name = "cli_writers_#{Time.now.to_i}"
+      prefix = 'writers'
+      begin
+        unless ENV['MONGO_URL']
+          raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
+          container = "pl-mongo-cli-writers-#{Time.now.to_i}"
+          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+        end
+        raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
+
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' }).use(db_name)
+        coll = client[coll_name.to_sym]
+        coll.insert_many(5.times.map { { _id: BSON::ObjectId.new, v: 1 } })
+
+        cmd = [
+          bin,
+          "--uri #{mongo_url}",
+          "--db #{db_name}",
+          "--collection #{coll_name}",
+          "--output #{dir}",
+          "--prefix #{prefix}",
+          '--format jsonl',
+          '--writer-threads 2'
+        ].join(' ')
+        `#{cmd}`
+        expect($CHILD_STATUS.success?).to be true
+
+        data = JSON.parse(File.read(File.join(dir, "#{prefix}.manifest.json")))
+        expect(data['options']['writer_threads']).to eq(2)
+      ensure
+        system("docker rm -f #{container} > /dev/null 2>&1") if container
+      end
+    end
+  end
+
   it 'forces telemetry on/off via --telemetry and records flag' do
     Dir.mktmpdir('purplelight-cli-telemetry') do |dir|
       container = nil
@@ -212,6 +299,7 @@ RSpec.describe 'CLI tunables via flags' do
       begin
         unless ENV['MONGO_URL']
           raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
           container = "pl-mongo-cli-telemetry-#{Time.now.to_i}"
           system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
         end
@@ -252,6 +340,7 @@ RSpec.describe 'CLI tunables via flags' do
       begin
         unless ENV['MONGO_URL']
           raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
           container = "pl-mongo-cli-res-over-#{Time.now.to_i}"
           system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
         end

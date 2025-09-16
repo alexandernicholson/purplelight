@@ -393,5 +393,3 @@ RSpec.describe 'CLI additional end-to-end' do
     end
   end
 end
-
-

@@ -6,15 +6,13 @@ require 'zlib'
 require 'fileutils'
 
 begin
-  require 'zstds'
-rescue LoadError
-  # zstd not available; fallback handled later via gzip
-end
-
-begin
   require 'zstd-ruby'
 rescue LoadError
-  # alternative zstd gem not available
+  begin
+    require 'zstds'
+  rescue LoadError
+    # no zstd backend; gzip fallback used later
+  end
 end
 
 module Purplelight
@@ -200,14 +198,22 @@ module Purplelight
     end
 
     def determine_effective_compression(requested)
-      case requested.to_s
-      when 'zstd'
-        (defined?(ZSTDS) || (Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter)) ? :zstd : :gzip)
-      when 'none'
-        :none
-      else
-        :gzip
+      # Order: explicit request -> zstd-ruby -> zstds -> gzip
+      req = requested.to_s
+      return :none if req == 'none'
+      return :gzip if req == 'gzip'
+
+      if req == 'zstd'
+        return :zstd if Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter)
+        return :zstd if defined?(ZSTDS)
+
+        return :gzip
       end
+      # Default auto-select
+      return :zstd if Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter)
+      return :zstd if defined?(ZSTDS)
+
+      :gzip
     end
 
     def infer_columns(docs)
