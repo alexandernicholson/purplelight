@@ -5,10 +5,7 @@ require 'purplelight'
 require 'logger'
 
 # Silence noisy Mongo driver warnings during tests
-begin
-  Mongo::Logger.logger.level = Logger::FATAL if defined?(Mongo::Logger)
-rescue StandardError
-end
+Mongo::Logger.logger.level = Logger::FATAL if defined?(Mongo::Logger) && Mongo::Logger.respond_to?(:logger) && Mongo::Logger.logger
 
 # Compression backends: prefer zstd-ruby, then zstds; require at most once
 begin
