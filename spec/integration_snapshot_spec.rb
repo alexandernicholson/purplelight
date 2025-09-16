@@ -8,10 +8,12 @@ require 'stringio'
 begin
   require 'zstds'
 rescue LoadError
+  warn 'zstds gem not available; falling back to gzip in tests'
 end
 begin
   require 'zstd-ruby'
 rescue LoadError
+  warn 'zstd-ruby gem not available; falling back to ruby-zstds or gzip in tests'
 end
 
 RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
@@ -98,7 +100,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
           # Prefer zstd-ruby single-shot API, fallback to ruby-zstds stream read
           puts "Sample output lines from #{File.basename(first_part)}:"
           if Object.const_defined?(:Zstd)
-            data = ::Zstd.decompress(File.binread(first_part))
+            data = Zstd.decompress(File.binread(first_part))
             StringIO.new(data).each_line.first(3).each { |line| puts line.strip }
           elsif defined?(ZSTDS)
             ZSTDS::Stream::Reader.open(first_part) do |zr|
@@ -167,7 +169,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
         elsif csv_path.end_with?('.zst')
           puts 'CSV sample lines:'
           if Object.const_defined?(:Zstd)
-            data = ::Zstd.decompress(File.binread(csv_path))
+            data = Zstd.decompress(File.binread(csv_path))
             StringIO.new(data).each_line.first(3).each { |line| puts line&.strip }
           elsif defined?(ZSTDS)
             ZSTDS::Stream::Reader.open(csv_path) do |zr|

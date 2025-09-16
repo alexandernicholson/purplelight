@@ -30,7 +30,7 @@ module Purplelight
       @logger = logger
       @manifest = manifest
       env_level = ENV['PL_ZSTD_LEVEL']&.to_i
-      @compression_level = compression_level || (env_level && env_level > 0 ? env_level : nil)
+      @compression_level = compression_level || (env_level&.positive? ? env_level : nil)
 
       @part_index = nil
       @io = nil
@@ -44,15 +44,15 @@ module Purplelight
         level_disp = @compression_level || (ENV['PL_ZSTD_LEVEL']&.to_i if @effective_compression.to_s == 'zstd')
         @logger.info("WriterJSONL using compression='#{@effective_compression}' level='#{level_disp || 'default'}'")
       end
-      if @effective_compression.to_s != @compression.to_s
-        @logger&.warn("requested compression '#{@compression}' not available; using '#{@effective_compression}'")
-      end
+      return unless @effective_compression.to_s != @compression.to_s
+
+      @logger&.warn("requested compression '#{@compression}' not available; using '#{@effective_compression}'")
     end
 
     def write_many(batch)
       ensure_open!
 
-      chunk_threshold = (ENV['PL_WRITE_CHUNK_BYTES']&.to_i || (8 * 1024 * 1024))
+      chunk_threshold = ENV['PL_WRITE_CHUNK_BYTES']&.to_i || (8 * 1024 * 1024)
       total_bytes = 0
       rows = 0
 
@@ -200,7 +200,7 @@ module Purplelight
     def determine_effective_compression(requested)
       case requested.to_s
       when 'zstd'
-        ((defined?(ZSTDS) || (Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter))) ? :zstd : :gzip)
+        (defined?(ZSTDS) || (Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter)) ? :zstd : :gzip)
       when 'none'
         :none
       else

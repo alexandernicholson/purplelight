@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'English'
 require 'spec_helper'
 require 'tmpdir'
 require 'json'
@@ -10,10 +11,12 @@ require 'time'
 begin
   require 'zstds'
 rescue LoadError
+  warn 'zstds gem not available; falling back to gzip in tests'
 end
 begin
   require 'zstd-ruby'
 rescue LoadError
+  warn 'zstd-ruby gem not available; falling back to ruby-zstds or gzip in tests'
 end
 
 RSpec.describe 'CLI timed query end-to-end' do
@@ -57,12 +60,12 @@ RSpec.describe 'CLI timed query end-to-end' do
         coll = client[coll_name.to_sym]
         base = Time.now.utc - 3600
         docs = 10.times.map do |i|
-          { _id: BSON::ObjectId.new, created_at: base + i * 60, n: i }
+          { _id: BSON::ObjectId.new, created_at: base + (i * 60), n: i }
         end
         coll.insert_many(docs)
 
-        range_start = (base + 3 * 60).iso8601
-        range_end = (base + 7 * 60).iso8601
+        range_start = (base + (3 * 60)).iso8601
+        range_end = (base + (7 * 60)).iso8601
         # Extended JSON with $date so CLI parses to Time via BSON::ExtJSON
         query_json = JSON.generate({ 'created_at' => { '$gte' => { '$date' => range_start }, '$lt' => { '$date' => range_end } } })
 
@@ -78,8 +81,8 @@ RSpec.describe 'CLI timed query end-to-end' do
           "--query '#{query_json}'"
         ].join(' ')
 
-        out = `#{cmd}`
-        expect($?.success?).to be true
+        `#{cmd}`
+        expect($CHILD_STATUS.success?).to be true
 
         # Read produced parts
         files = Dir[File.join(dir, "#{prefix}-part-*.jsonl*")]
@@ -90,7 +93,7 @@ RSpec.describe 'CLI timed query end-to-end' do
           Zlib::GzipReader.open(path) { |gz| lines = gz.each_line.first(50) }
         elsif path.end_with?('.zst')
           if Object.const_defined?(:Zstd)
-            data = ::Zstd.decompress(File.binread(path))
+            data = Zstd.decompress(File.binread(path))
             lines = StringIO.new(data).each_line.first(50)
           elsif defined?(ZSTDS)
             ZSTDS::Stream::Reader.open(path) do |zr|
@@ -120,5 +123,3 @@ RSpec.describe 'CLI timed query end-to-end' do
     end
   end
 end
-
-

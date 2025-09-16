@@ -8,10 +8,12 @@ require 'stringio'
 begin
   require 'zstds'
 rescue LoadError
+  warn 'zstds gem not available; falling back to gzip in tests'
 end
 begin
   require 'zstd-ruby'
 rescue LoadError
+  warn 'zstd-ruby gem not available; falling back to ruby-zstds or gzip in tests'
 end
 
 RSpec.describe 'Query filtering' do
@@ -78,7 +80,7 @@ RSpec.describe 'Query filtering' do
           end
         elsif path.end_with?('.zst')
           if Object.const_defined?(:Zstd)
-            data = ::Zstd.decompress(File.binread(path))
+            data = Zstd.decompress(File.binread(path))
             lines = StringIO.new(data).each_line.first(10)
           elsif defined?(ZSTDS)
             ZSTDS::Stream::Reader.open(path) do |zr|

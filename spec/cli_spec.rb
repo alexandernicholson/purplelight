@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'English'
 require 'spec_helper'
 
 RSpec.describe 'CLI' do
@@ -25,7 +26,7 @@ RSpec.describe 'CLI' do
   it '--query accepts Extended JSON with $date (parses to Time) in dry-run mode' do
     # Ensure it doesn't crash parsing the query; --dry-run only prints read_preference JSON today
     query = '{"created_at": {"$gte": {"$date": "2024-01-01T00:00:00Z"}}}'
-    out = `#{bin} --dry-run --uri mongodb://localhost --db db --collection c --output /tmp --query '#{query}'`
-    expect($?.success?).to be true
+    `#{bin} --dry-run --uri mongodb://localhost --db db --collection c --output /tmp --query '#{query}'`
+    expect($CHILD_STATUS.success?).to be true
   end
 end

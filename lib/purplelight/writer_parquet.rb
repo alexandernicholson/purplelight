@@ -134,9 +134,8 @@ module Purplelight
     def extract_value(doc, key)
       value = doc[key] || doc[key.to_sym]
       # Normalize common MongoDB/BSON types to Parquet-friendly values
-      if defined?(BSON) && value.is_a?(BSON::ObjectId)
-        return value.to_s
-      end
+      return value.to_s if defined?(BSON) && value.is_a?(BSON::ObjectId)
+
       value
     end
   end

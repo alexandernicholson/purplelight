@@ -31,7 +31,7 @@ module Purplelight
       @logger = logger
       @manifest = manifest
       env_level = ENV['PL_ZSTD_LEVEL']&.to_i
-      @compression_level = (env_level && env_level > 0 ? env_level : nil)
+      @compression_level = (env_level&.positive? ? env_level : nil)
       @single_file = single_file
 
       @columns = columns&.map(&:to_s)
@@ -123,8 +123,8 @@ module Purplelight
         @io.flush if @io.respond_to?(:flush)
       end
 
-      def method_missing(method_name, *args, &block)
-        @io.send(method_name, *args, &block)
+      def method_missing(method_name, *, &)
+        @io.send(method_name, *, &)
       end
 
       def respond_to_missing?(method_name, include_private = false)
@@ -202,7 +202,7 @@ module Purplelight
     def determine_effective_compression(requested)
       case requested.to_s
       when 'zstd'
-        ((defined?(ZSTDS) || (Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter))) ? :zstd : :gzip)
+        (defined?(ZSTDS) || (Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter)) ? :zstd : :gzip)
       when 'none'
         :none
       else

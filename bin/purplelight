@@ -33,21 +33,24 @@ parser = OptionParser.new do |opts|
   opts.on('--partitions N', Integer, 'Number of partitions') { |v| options[:partitions] = v }
   opts.on('--batch-size N', Integer, 'Mongo batch size (default 2000)') { |v| options[:batch_size] = v }
   opts.on('--by-size BYTES', Integer, 'Shard by size (bytes); default 268435456') do |v|
-    options[:sharding] = { mode: :by_size, part_bytes: v }
+    options[:sharding] ||= {}
+    options[:sharding][:mode] = :by_size
+    options[:sharding][:part_bytes] = v
   end
-  opts.on('--single-file', 'Write a single output file') { options[:sharding] = { mode: :single_file } }
+  opts.on('--single-file', 'Write a single output file') do
+    options[:sharding] ||= {}
+    options[:sharding][:mode] = :single_file
+  end
   opts.on('--prefix NAME', 'Output file prefix') do |v|
     options[:sharding] ||= {}
     options[:sharding][:prefix] = v
   end
   opts.on('-q', '--query JSON', 'Filter query as JSON (Extended JSON supported)') do |v|
-    begin
-      # Prefer BSON Extended JSON to support $date, $oid, etc.
-      options[:query] = BSON::ExtJSON.parse(v)
-    rescue StandardError
-      # Fallback to plain JSON for compatibility
-      options[:query] = JSON.parse(v)
-    end
+    # Prefer BSON Extended JSON to support $date, $oid, etc.
+    options[:query] = BSON::ExtJSON.parse(v)
+  rescue StandardError
+    # Fallback to plain JSON for compatibility
+    options[:query] = JSON.parse(v)
   end
   opts.on('--projection JSON', 'Projection as JSON (e.g., {"_id":1,"field":1})') { |v| options[:projection] = JSON.parse(v) }
   opts.on('--read-preference MODE',
