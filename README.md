@@ -244,8 +244,12 @@ Key points:
 Benchmarking (optional):
 
 ```bash
-# 1M docs benchmark with tunables
+# 1M docs benchmark with tunables (JSONL)
 BENCH=1 BENCH_PARTITIONS=16 BENCH_BATCH_SIZE=8000 BENCH_QUEUE_MB=512 BENCH_ROTATE_MB=512 BENCH_COMPRESSION=gzip \
+  bundle exec rspec spec/benchmark_perf_spec.rb --format doc
+
+# Parquet benchmark (requires Arrow/Parquet)
+BENCH=1 BENCH_FORMAT=parquet BENCH_PARQUET_ROW_GROUP=50000 BENCH_PARTITIONS=16 BENCH_BATCH_SIZE=8000 \
   bundle exec rspec spec/benchmark_perf_spec.rb --format doc
 ```
 
@@ -315,3 +319,8 @@ Benchmark results:
 Finished in 14.02 seconds (files took 0.31974 seconds to load)
 1 example, 0 failures
 ```
+
+Additional BENCH variables:
+
+- `BENCH_FORMAT`: `jsonl|parquet` (default `jsonl`).
+- `BENCH_PARQUET_ROW_GROUP`: Parquet row group size (rows), e.g. `50000`.

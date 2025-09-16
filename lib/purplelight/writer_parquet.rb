@@ -28,6 +28,7 @@ module Purplelight
       @closed = false
       @file_seq = 0
       @part_index = nil
+      @pq_writer = nil
 
       ensure_dependencies!
       reset_buffers
@@ -36,6 +37,7 @@ module Purplelight
     def write_many(array_of_docs)
       ensure_open!
       array_of_docs.each { |doc| @buffer_docs << doc }
+      flush_row_groups_if_needed
       @manifest&.add_progress_to_part!(index: @part_index, rows_delta: array_of_docs.length, bytes_delta: 0)
     end
 
@@ -43,15 +45,7 @@ module Purplelight
       return if @closed
 
       ensure_open!
-      unless @buffer_docs.empty?
-        t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
-        table = build_table(@buffer_docs)
-        Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
-
-        t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
-        write_table(table, @writer_path, append: false)
-        Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
-      end
+      flush_all_row_groups
       finalize_current_part!
       @closed = true
     end
@@ -92,22 +86,32 @@ module Purplelight
     end
 
     def write_table(table, path, append: false) # rubocop:disable Lint/UnusedMethodArgument
-      # Prefer Arrow's save with explicit parquet format; compression defaults per build.
-      if table.respond_to?(:save)
-        table.save(path, format: :parquet)
+      # Stream via ArrowFileWriter when available to avoid building huge tables
+      if defined?(Parquet::ArrowFileWriter)
+        unless @pq_writer
+          @pq_writer = Parquet::ArrowFileWriter.open(table.schema, path)
+        end
+        # Prefer passing row_group_size; fallback to single-arg for older APIs
+        begin
+          @pq_writer.write_table(table, @row_group_size)
+        rescue ArgumentError
+          @pq_writer.write_table(table)
+        end
         return
       end
-      # Fallback to red-parquet writer
-      if defined?(Parquet::ArrowFileWriter)
-        writer = Parquet::ArrowFileWriter.open(table.schema, path)
-        writer.write_table(table)
-        writer.close
+      # Fallback to one-shot save when streaming API is not available
+      if table.respond_to?(:save)
+        table.save(path, format: :parquet)
         return
       end
       raise 'Parquet writer not available in this environment'
     end
 
     def finalize_current_part!
+      if @pq_writer
+        @pq_writer.close
+        @pq_writer = nil
+      end
       @manifest&.complete_part!(index: @part_index, checksum: nil)
       @file_seq += 1 unless @single_file
       @writer_path = nil
@@ -137,6 +141,39 @@ module Purplelight
       return value.to_s if defined?(BSON) && value.is_a?(BSON::ObjectId)
 
       value
+    end
+
+    def flush_row_groups_if_needed
+      return if @buffer_docs.empty?
+
+      while @buffer_docs.length >= @row_group_size
+        group = @buffer_docs.shift(@row_group_size)
+        t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
+        table = build_table(group)
+        Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
+
+        t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
+        write_table(table, @writer_path, append: true)
+        Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
+      end
+    end
+
+    def flush_all_row_groups
+      return if @buffer_docs.empty?
+
+      # Flush any full groups first
+      flush_row_groups_if_needed
+      return if @buffer_docs.empty?
+
+      # Flush remaining as a final smaller group
+      t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
+      table = build_table(@buffer_docs)
+      Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
+
+      t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
+      write_table(table, @writer_path, append: true)
+      Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
+      @buffer_docs.clear
     end
   end
 end

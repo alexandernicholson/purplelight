@@ -48,7 +48,8 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
 
         # Export
         export_dir = dir
-        prefix = 'bench_items'
+        bench_format = (ENV['BENCH_FORMAT'] || 'jsonl').downcase
+        prefix = bench_format == 'parquet' ? 'bench_items_parquet' : 'bench_items'
         t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         partitions = if ENV['BENCH_PARTITIONS'] && ENV['BENCH_PARTITIONS'].to_i > 0
                        ENV['BENCH_PARTITIONS'].to_i
@@ -61,28 +62,52 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         queue_mb = ENV['BENCH_QUEUE_MB'] && ENV['BENCH_QUEUE_MB'].to_i > 0 ? ENV['BENCH_QUEUE_MB'].to_i : 256
         rotate_mb = ENV['BENCH_ROTATE_MB'] && ENV['BENCH_ROTATE_MB'].to_i > 0 ? ENV['BENCH_ROTATE_MB'].to_i : 512
         compression = ENV['BENCH_COMPRESSION'] && !ENV['BENCH_COMPRESSION'].empty? ? ENV['BENCH_COMPRESSION'].to_sym : :gzip
-        Purplelight.snapshot(
-          client: db,
-          collection: :items,
-          output: export_dir,
-          format: :jsonl,
-          compression: compression,
-          partitions: partitions,
-          batch_size: batch_size,
-          query: {},
-          sharding: { mode: :by_size, part_bytes: rotate_mb * 1024 * 1024, prefix: prefix },
-          queue_size_bytes: queue_mb * 1024 * 1024,
-          resume: { enabled: true }
-        )
+        if bench_format == 'parquet'
+          begin
+            require 'arrow'
+            require 'parquet'
+          rescue LoadError
+            skip 'Parquet not available for BENCH_FORMAT=parquet'
+          end
+          parquet_row_group = (ENV['BENCH_PARQUET_ROW_GROUP'] || '50000').to_i
+          Purplelight.snapshot(
+            client: db,
+            collection: :items,
+            output: export_dir,
+            format: :parquet,
+            compression: compression,
+            partitions: partitions,
+            batch_size: batch_size,
+            query: {},
+            sharding: { mode: :single_file, prefix: prefix },
+            queue_size_bytes: queue_mb * 1024 * 1024,
+            parquet_row_group: parquet_row_group,
+            resume: { enabled: true }
+          )
+        else
+          Purplelight.snapshot(
+            client: db,
+            collection: :items,
+            output: export_dir,
+            format: :jsonl,
+            compression: compression,
+            partitions: partitions,
+            batch_size: batch_size,
+            query: {},
+            sharding: { mode: :by_size, part_bytes: rotate_mb * 1024 * 1024, prefix: prefix },
+            queue_size_bytes: queue_mb * 1024 * 1024,
+            resume: { enabled: true }
+          )
+        end
         t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         elapsed = t1 - t0
 
         manifest_path = File.join(export_dir, "#{prefix}.manifest.json")
         data = JSON.parse(File.read(manifest_path))
-        rows = data.fetch('parts', []).sum { |p| p['rows'].to_i }
-
-        parts = Dir[File.join(export_dir, "#{prefix}-part-*.jsonl*")]
-        bytes = parts.sum { |p| File.size(p) }
+        parts_meta = data.fetch('parts', [])
+        rows = parts_meta.sum { |p| p['rows'].to_i }
+        part_paths = parts_meta.map { |p| p['path'] }.compact
+        bytes = part_paths.sum { |p| File.exist?(p) ? File.size(p) : 0 }
 
         docs_per_sec = (rows / elapsed).round(2)
         mb_per_sec = (bytes.to_f / (1024 * 1024) / elapsed).round(2)
@@ -90,12 +115,16 @@ RSpec.describe 'Performance benchmark (1M docs, gated by BENCH=1)' do
         puts 'Benchmark results:'
         puts "  Inserted: #{inserted} docs in #{insert_elapsed.round(2)}s"
         puts "  Exported: #{rows} docs in #{elapsed.round(2)}s"
-        puts "  Parts:    #{parts.size}, Bytes: #{bytes}"
+        puts "  Parts:    #{parts_meta.size}, Bytes: #{bytes}"
         puts "  Throughput: #{docs_per_sec} docs/s, #{mb_per_sec} MB/s"
-        puts "  Settings: partitions=#{partitions}, batch_size=#{batch_size}, queue_mb=#{queue_mb}, rotate_mb=#{rotate_mb}, compression=#{compression}"
+        if bench_format == 'parquet'
+          puts "  Settings: format=parquet, partitions=#{partitions}, batch_size=#{batch_size}, row_group=#{parquet_row_group}, compression=#{compression}"
+        else
+          puts "  Settings: format=jsonl, partitions=#{partitions}, batch_size=#{batch_size}, queue_mb=#{queue_mb}, rotate_mb=#{rotate_mb}, compression=#{compression}"
+        end
 
         expect(rows).to eq(doc_count)
-        expect(parts.size).to be > 0
+        expect(parts_meta.size).to be > 0
       ensure
         system("docker rm -f #{container} > /dev/null 2>&1")
       end
