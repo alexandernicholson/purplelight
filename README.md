@@ -138,9 +138,20 @@ Purplelight.snapshot(
   output: '/data/exports',
   format: :parquet,
   sharding: { mode: :single_file, prefix: 'users' },
+  # Optional: tune row group size
+  # parquet_row_group: 50_000,
   resume: { enabled: true }
 )
 ```
+
+### Environment variables (optional)
+
+CLI flags take precedence, but these environment variables can set sensible defaults:
+
+- `PL_ZSTD_LEVEL`: default zstd compression level used by writers.
+- `PL_WRITE_CHUNK_BYTES`: JSONL join/write chunk size in bytes.
+- `PL_PARQUET_ROW_GROUP`: default Parquet row group size (rows).
+- `PL_TELEMETRY`: set to `1` to enable telemetry by default.
 
 ### CLI
 
@@ -149,8 +160,45 @@ bundle exec bin/purplelight \
   --uri "$MONGO_URL" \
   --db mydb --collection users \
   --output /data/exports \
-  --format jsonl --partitions 8 --by-size $((256*1024*1024)) --prefix users
+  --format jsonl --partitions 8 --by-size $((256*1024*1024)) --prefix users \
+  --queue-mb 512 --rotate-mb 512 --compression zstd --compression-level 6 \
+  --read-preference secondary --read-tags nodeType=ANALYTICS,region=EAST \
+  --read-concern majority --no-cursor-timeout true
 ```
+
+#### CLI options (reference)
+
+- `--uri URI` (required): Mongo connection string.
+- `--db NAME` (required): Database name.
+- `--collection NAME` (required): Collection name.
+- `--output PATH` (required): Output directory or file path.
+- `--format FORMAT`: `jsonl|csv|parquet` (default `jsonl`).
+- `--compression NAME`: `zstd|gzip|none` (default `zstd`).
+- `--compression-level N`: Compression level (zstd or gzip; writer-specific defaults if omitted).
+- `--partitions N`: Number of reader partitions (defaults to ≥4 and ≤32 based on cores).
+- `--batch-size N`: Mongo batch size (default 2000).
+- `--queue-mb MB`: In-memory queue size in MB (default 256).
+- `--rotate-mb MB`: Target rotate size for JSONL/CSV parts in MB (default 256). For multi-part outputs, pairs well with `--by-size`.
+- `--by-size BYTES`: Plan size-based sharding for multi-part outputs.
+- `--single-file`: Single output file (CSV/Parquet; JSONL remains multi-part).
+- `--prefix NAME`: Output filename prefix (defaults to collection name when output is a directory).
+- `--query JSON`: Filter as JSON/Extended JSON (supports `$date`, `$oid`, etc.).
+- `--projection JSON`: Projection as JSON, e.g. `{"_id":1,"email":1}`.
+- `--read-preference MODE`: `primary|primary_preferred|secondary|secondary_preferred|nearest`.
+- `--read-tags key=value[,key=value...]`: Tag sets for node pinning.
+- `--read-concern LEVEL`: `majority|local|linearizable|available|snapshot`.
+- `--no-cursor-timeout BOOL`: Toggle `noCursorTimeout` (default true).
+- `--parquet-row-group N`: Parquet row group size (rows).
+- `--write-chunk-mb MB`: JSONL encode/write chunk size before enqueueing.
+- `--writer-threads N` (experimental): Number of writer threads (JSONL only).
+- `--telemetry on|off`: Force enable/disable telemetry output.
+- `--resume-overwrite-incompatible`: Overwrite an existing incompatible manifest to safely resume anew.
+- `--dry-run`: Print effective read preference JSON and exit (no snapshot).
+- `--version`, `--help`: Utility commands.
+
+Notes:
+- Compression backend selection order is: requested format → `zstd-ruby` → `zstds` → `gzip`.
+- `--single-file` and `--by-size` update only the sharding mode/params and preserve any provided `--prefix`.
 
 ### Architecture
 
@@ -181,12 +229,17 @@ Key points:
 
 ### Tuning for performance
 
-- Partitions: start with `2 × cores` (default). Increase gradually if reads are underutilized; too high can add overhead.
-- Batch size: 2k–10k usually works well. Larger batches reduce cursor roundtrips, but can raise latency/memory.
-- Queue size: increase to 256–512MB to reduce backpressure on readers for fast disks.
-- Compression: use `:zstd` for good ratio; for max speed, try `:gzip` with low level.
-- Rotation size: larger (512MB–1GB) reduces finalize overhead for many parts.
-- Read preference: offload to secondaries or tagged analytics nodes when available.
+- **Partitions**: start with `2 × cores` (default). Increase gradually if reads are underutilized; too high can add overhead. CLI: `--partitions`.
+- **Batch size**: 2k–10k usually works well. Larger batches reduce cursor roundtrips, but can raise latency/memory. CLI: `--batch-size`.
+- **Queue size**: increase to 256–512MB to reduce backpressure on readers for fast disks. CLI: `--queue-mb`.
+- **Compression**: prefer `zstd`; adjust level to balance speed/ratio. CLI: `--compression zstd --compression-level N`. For max speed, try `--compression gzip --compression-level 1`.
+- **Rotation size**: larger (512MB–1GB) reduces finalize overhead for many parts. CLI: `--rotate-mb` (and/or `--by-size`).
+- **JSONL chunking**: tune builder write chunk size for throughput. CLI: `--write-chunk-mb`.
+- **Parquet row groups**: choose a row group size that fits downstream readers. CLI: `--parquet-row-group`.
+- **Read preference**: offload to secondaries or tagged analytics nodes when available. CLI: `--read-preference`, `--read-tags`.
+- **Read concern**: pick an appropriate level for consistency/latency trade-offs. CLI: `--read-concern`.
+- **Cursor timeout**: for very long scans, leave `noCursorTimeout` enabled. CLI: `--no-cursor-timeout true|false`.
+- **Telemetry**: enable to inspect timing breakdowns; disable for minimal output. CLI: `--telemetry on|off`.
 
 Benchmarking (optional):
 
