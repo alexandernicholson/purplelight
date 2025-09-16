@@ -38,7 +38,8 @@ module Purplelight
                    resume: { enabled: true, state_path: nil, overwrite_incompatible: false },
                    sharding: { mode: :by_size, part_bytes: DEFAULTS[:rotate_bytes], prefix: nil },
                    logger: nil, on_progress: nil, read_concern: DEFAULTS[:read_concern], read_preference: DEFAULTS[:read_preference],
-                   no_cursor_timeout: DEFAULTS[:no_cursor_timeout], telemetry: nil)
+                   no_cursor_timeout: DEFAULTS[:no_cursor_timeout], telemetry: nil,
+                   compression_level: nil, writer_threads: 1, write_chunk_bytes: nil, parquet_row_group: nil)
       @client = client
       @collection = client[collection]
       @output = output
@@ -59,6 +60,10 @@ module Purplelight
       @read_concern = read_concern
       @read_preference = read_preference
       @no_cursor_timeout = no_cursor_timeout
+      @compression_level = compression_level
+      @writer_threads = writer_threads || 1
+      @write_chunk_bytes = write_chunk_bytes
+      @parquet_row_group = parquet_row_group
 
       @running = true
       @telemetry_enabled = telemetry ? telemetry.enabled? : (ENV['PL_TELEMETRY'] == '1')
@@ -90,7 +95,20 @@ module Purplelight
                  end
 
       manifest.configure!(collection: @collection.name, format: @format, compression: @compression, query_digest: query_digest, options: {
-                            partitions: @partitions, batch_size: @batch_size, rotate_bytes: @rotate_bytes, hint: @hint
+                            partitions: @partitions,
+                            batch_size: @batch_size,
+                            queue_size_bytes: @queue_size_bytes,
+                            rotate_bytes: @rotate_bytes,
+                            hint: @hint,
+                            read_concern: @read_concern,
+                            no_cursor_timeout: @no_cursor_timeout,
+                            writer_threads: @writer_threads,
+                            compression_level: (@compression_level || (ENV['PL_ZSTD_LEVEL']&.to_i if @compression.to_s == 'zstd') || (ENV['PL_ZSTD_LEVEL']&.to_i)),
+                            write_chunk_bytes: (@write_chunk_bytes || ENV['PL_WRITE_CHUNK_BYTES']&.to_i),
+                            parquet_row_group: (@parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i),
+                            sharding: @sharding,
+                            resume_overwrite_incompatible: (@resume && @resume[:overwrite_incompatible]) ? true : false,
+                            telemetry: @telemetry_enabled
                           })
       manifest.ensure_partitions!(@partitions)
 
@@ -114,8 +132,9 @@ module Purplelight
                                logger: @logger, manifest: manifest, single_file: single_file)
                when :parquet
                  single_file = @sharding && @sharding[:mode].to_s == 'single_file'
+                 row_group = @parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i || WriterParquet::DEFAULT_ROW_GROUP_SIZE
                  WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger,
-                                   manifest: manifest, single_file: single_file)
+                                   manifest: manifest, single_file: single_file, row_group_size: row_group)
                else
                  raise ArgumentError, "format not implemented: #{@format}"
                end

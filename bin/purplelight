@@ -18,7 +18,17 @@ options = {
   resume: { enabled: true },
   read_preference: nil,
   read_tags: nil,
-  dry_run: false
+  dry_run: false,
+  queue_size_bytes: nil,
+  rotate_bytes: nil,
+  compression_level: nil,
+  writer_threads: nil,
+  write_chunk_bytes: nil,
+  parquet_row_group: nil,
+  telemetry_flag: nil,
+  read_concern: nil,
+  no_cursor_timeout: nil,
+  resume_overwrite_incompatible: false
 }
 
 parser = OptionParser.new do |opts|
@@ -30,8 +40,11 @@ parser = OptionParser.new do |opts|
   opts.on('-o', '--output PATH', 'Output directory or file (required)') { |v| options[:output] = v }
   opts.on('-f', '--format FORMAT', 'Format: jsonl|csv|parquet (default jsonl)') { |v| options[:format] = v.to_sym }
   opts.on('--compression NAME', 'Compression: zstd|gzip|none') { |v| options[:compression] = v.to_sym }
+  opts.on('--compression-level N', Integer, 'Compression level for zstd/gzip (JSONL/CSV)') { |v| options[:compression_level] = v }
   opts.on('--partitions N', Integer, 'Number of partitions') { |v| options[:partitions] = v }
   opts.on('--batch-size N', Integer, 'Mongo batch size (default 2000)') { |v| options[:batch_size] = v }
+  opts.on('--queue-mb MB', Integer, 'Queue size in MB (default 256)') { |v| options[:queue_size_bytes] = v * 1024 * 1024 }
+  opts.on('--rotate-mb MB', Integer, 'Rotate part size in MB (default 256)') { |v| options[:rotate_bytes] = v * 1024 * 1024 }
   opts.on('--by-size BYTES', Integer, 'Shard by size (bytes); default 268435456') do |v|
     options[:sharding] ||= {}
     options[:sharding][:mode] = :by_size
@@ -45,6 +58,9 @@ parser = OptionParser.new do |opts|
     options[:sharding] ||= {}
     options[:sharding][:prefix] = v
   end
+  opts.on('--writer-threads N', Integer, 'Number of writer threads (experimental, JSONL only)') { |v| options[:writer_threads] = v }
+  opts.on('--write-chunk-mb MB', Integer, 'JSONL encode/write chunk size in MB') { |v| options[:write_chunk_bytes] = v * 1024 * 1024 }
+  opts.on('--parquet-row-group N', Integer, 'Parquet row group size (rows)') { |v| options[:parquet_row_group] = v }
   opts.on('-q', '--query JSON', 'Filter query as JSON (Extended JSON supported)') do |v|
     # Prefer BSON Extended JSON to support $date, $oid, etc.
     options[:query] = BSON::ExtJSON.parse(v)
@@ -57,6 +73,7 @@ parser = OptionParser.new do |opts|
           'Read preference mode: primary|primary_preferred|secondary|secondary_preferred|nearest') do |v|
     options[:read_preference] = v.to_sym
   end
+  opts.on('--read-concern LEVEL', 'Read concern: majority|local|linearizable|available|snapshot') { |v| options[:read_concern] = v.to_sym }
   opts.on('--read-tags TAGS',
           'Comma-separated key=value list to target tagged nodes (e.g., nodeType=ANALYTICS,region=EAST)') do |v|
     tags = {}
@@ -69,6 +86,13 @@ parser = OptionParser.new do |opts|
     options[:read_tags] = tags unless tags.empty?
   end
   opts.on('--dry-run', 'Parse options and print effective read preference JSON, then exit') { options[:dry_run] = true }
+  opts.on('--telemetry MODE', 'Telemetry on|off (overrides PL_TELEMETRY)') { |v| options[:telemetry_flag] = v }
+  opts.on('--no-cursor-timeout BOOL', 'noCursorTimeout true|false (default true)') do |v|
+    options[:no_cursor_timeout] = %w[true 1 yes].include?(v.to_s.downcase)
+  end
+  opts.on('--resume-overwrite-incompatible', 'Overwrite incompatible existing manifest on resume') do
+    options[:resume_overwrite_incompatible] = true
+  end
   opts.on('--version', 'Show version') do
     puts Purplelight::VERSION
     exit 0
@@ -110,7 +134,7 @@ end
 client = Mongo::Client.new(options[:uri])
 options[:partitions] ||= (Etc.respond_to?(:nprocessors) ? [Etc.nprocessors * 2, 4].max : 4)
 
-ok = Purplelight.snapshot(
+snapshot_args = {
   client: client.use(options[:db]),
   collection: options[:collection],
   output: options[:output],
@@ -122,8 +146,27 @@ ok = Purplelight.snapshot(
   projection: options[:projection],
   sharding: options[:sharding],
   read_preference: effective_read || options[:read_preference],
-  resume: { enabled: true },
+  resume: { enabled: true, overwrite_incompatible: options[:resume_overwrite_incompatible] },
   on_progress: ->(s) { warn("progress: #{s.to_json}") }
-)
+}
+
+# optional tunables
+snapshot_args[:queue_size_bytes] = options[:queue_size_bytes] if options[:queue_size_bytes]
+snapshot_args[:rotate_bytes] = options[:rotate_bytes] if options[:rotate_bytes]
+snapshot_args[:read_concern] = options[:read_concern] if options[:read_concern]
+snapshot_args[:no_cursor_timeout] = options[:no_cursor_timeout] unless options[:no_cursor_timeout].nil?
+
+# telemetry env override
+if options[:telemetry_flag]
+  ENV['PL_TELEMETRY'] = (options[:telemetry_flag].to_s.downcase == 'on' ? '1' : '0')
+end
+
+# writer-specific overrides via environment for v1 compatibility
+ENV['PL_ZSTD_LEVEL'] = options[:compression_level].to_s if options[:compression_level]
+ENV['PL_WRITE_CHUNK_BYTES'] = options[:write_chunk_bytes].to_s if options[:write_chunk_bytes]
+ENV['PL_PARQUET_ROW_GROUP'] = options[:parquet_row_group].to_s if options[:parquet_row_group]
+ENV['PL_WRITER_THREADS'] = options[:writer_threads].to_s if options[:writer_threads]
+
+ok = Purplelight.snapshot(**snapshot_args)
 
 exit(ok ? 0 : 1)
