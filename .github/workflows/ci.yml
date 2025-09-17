@@ -46,3 +46,9 @@ jobs:
           MONGO_URL: mongodb://127.0.0.1:27017
         run: |
           bundle exec rspec --format progress
+
+      - name: Run benchmark (JSONL)
+        env:
+          BENCH: '1'
+        run: |
+          bundle exec rspec spec/benchmark_perf_spec.rb --format doc
