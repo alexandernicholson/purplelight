@@ -40,7 +40,6 @@ module Purplelight
       ensure_open!
       array_of_docs.each { |doc| @buffer_docs << doc }
       flush_row_groups_if_needed
-      @manifest&.add_progress_to_part!(index: @part_index, rows_delta: array_of_docs.length, bytes_delta: 0)
     end
 
     def close
@@ -91,7 +90,8 @@ module Purplelight
       # Stream via ArrowFileWriter when available to avoid building huge tables
       if defined?(Parquet::ArrowFileWriter)
         unless @pq_writer
-          @pq_writer = Parquet::ArrowFileWriter.open(table.schema, path)
+          props = build_writer_properties_for_compression(@compression)
+          @pq_writer = create_arrow_file_writer(table.schema, path, props)
         end
         # Prefer passing row_group_size; fallback to single-arg for older APIs
         begin
@@ -103,7 +103,11 @@ module Purplelight
       end
       # Fallback to one-shot save when streaming API is not available
       if table.respond_to?(:save)
-        table.save(path, format: :parquet)
+        begin
+          table.save(path, format: :parquet, compression: normalize_parquet_compression_name(@compression))
+        rescue StandardError
+          table.save(path, format: :parquet)
+        end
         return
       end
       raise 'Parquet writer not available in this environment'
@@ -111,6 +115,7 @@ module Purplelight
 
     def finalize_current_part!
       return if @writer_path.nil?
+
       if @pq_writer
         @pq_writer.close
         @pq_writer = nil
@@ -154,15 +159,50 @@ module Purplelight
       while @buffer_docs.length >= @row_group_size
         ensure_open!
         group = @buffer_docs.shift(@row_group_size)
-        t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
-        table = build_table(group)
-        Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
+        if @rotate_rows && !@single_file && (@rows_in_current_file + group.length) > @rotate_rows
+          # Write a partial chunk to fill the current file, then rotate and write the rest
+          remaining_allowed = @rotate_rows - @rows_in_current_file
+          if remaining_allowed.positive?
+            part_a = group.first(remaining_allowed)
+            t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
+            table_a = build_table(part_a)
+            Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
 
-        t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
-        write_table(table, @writer_path, append: true)
-        Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
-        @rows_in_current_file += group.length
-        maybe_rotate!
+            t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
+            write_table(table_a, @writer_path, append: true)
+            Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
+            @manifest&.add_progress_to_part!(index: @part_index, rows_delta: part_a.length, bytes_delta: 0)
+            @rows_in_current_file += part_a.length
+          end
+
+          finalize_current_part!
+          ensure_open!
+
+          part_b = group.drop(remaining_allowed)
+          unless part_b.empty?
+            t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
+            table_b = build_table(part_b)
+            Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
+
+            t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
+            write_table(table_b, @writer_path, append: true)
+            Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
+            @manifest&.add_progress_to_part!(index: @part_index, rows_delta: part_b.length, bytes_delta: 0)
+            @rows_in_current_file += part_b.length
+            maybe_rotate!
+          end
+        else
+          t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
+          table = build_table(group)
+          Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
+
+          t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
+          write_table(table, @writer_path, append: true)
+          Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
+          @manifest&.add_progress_to_part!(index: @part_index, rows_delta: group.length, bytes_delta: 0)
+          @rows_in_current_file += group.length
+          maybe_rotate!
+        end
       end
     end
 
@@ -174,17 +214,25 @@ module Purplelight
       return if @buffer_docs.empty?
 
       # Flush remaining as a final smaller group
+      remaining = @buffer_docs.length
       t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
       table = build_table(@buffer_docs)
       Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
 
-      t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
       ensure_open!
+      # Pre-rotate to avoid exceeding rotate_rows on this final write
+      if @rotate_rows && !@single_file && @rows_in_current_file.positive? && (@rows_in_current_file + remaining) > @rotate_rows
+        finalize_current_part!
+        ensure_open!
+      end
+
+      t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
       write_table(table, @writer_path, append: true)
       Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
+      rows_written = (table.respond_to?(:n_rows) ? table.n_rows : remaining)
+      @manifest&.add_progress_to_part!(index: @part_index, rows_delta: rows_written, bytes_delta: 0)
+      @rows_in_current_file += rows_written
       @buffer_docs.clear
-      @rows_in_current_file += table.n_rows if table.respond_to?(:n_rows)
-      @rows_in_current_file += @buffer_docs.length unless table.respond_to?(:n_rows)
       maybe_rotate!
     end
 
@@ -194,6 +242,91 @@ module Purplelight
 
       finalize_current_part!
       # Next write will open a new part
+    end
+
+    def build_writer_properties_for_compression(requested)
+      codec_const = parquet_codec_constant(requested)
+      return nil unless codec_const
+
+      # Prefer WriterProperties builder if available
+      begin
+        if defined?(Parquet::WriterProperties) && Parquet::WriterProperties.respond_to?(:builder)
+          builder = Parquet::WriterProperties.builder
+          if builder.respond_to?(:compression)
+            builder = builder.compression(codec_const)
+          elsif builder.respond_to?(:set_compression)
+            builder = builder.set_compression(codec_const)
+          end
+          return builder.build if builder.respond_to?(:build)
+        end
+      rescue StandardError
+        # fall through to other strategies
+      end
+
+      # Alternative builder class naming fallback
+      begin
+        if defined?(Parquet::WriterPropertiesBuilder)
+          b = Parquet::WriterPropertiesBuilder.new
+          if b.respond_to?(:compression)
+            b.compression(codec_const)
+          elsif b.respond_to?(:set_compression)
+            b.set_compression(codec_const)
+          end
+          return b.build if b.respond_to?(:build)
+        end
+      rescue StandardError
+        # ignore
+      end
+      nil
+    end
+
+    def create_arrow_file_writer(schema, path, props)
+      attempts = []
+      if props
+        attempts << -> { Parquet::ArrowFileWriter.open(schema, path, props) }
+        attempts << -> { Parquet::ArrowFileWriter.open(schema, path, properties: props) }
+      end
+      attempts << -> { Parquet::ArrowFileWriter.open(schema, path) }
+
+      attempts.each do |call|
+        return call.call
+      rescue StandardError
+        next
+      end
+      raise 'failed to open Parquet::ArrowFileWriter'
+    end
+
+    def parquet_codec_constant(requested)
+      name = normalize_parquet_compression_name(requested)
+      return nil unless name
+
+      up = case name
+           when 'zstd', 'zstandard' then 'ZSTD'
+           when 'gzip' then 'GZIP'
+           when 'snappy' then 'SNAPPY'
+           when 'none' then 'UNCOMPRESSED'
+           else name.upcase
+           end
+      candidates = %w[CompressionType Compression CompressionCodec]
+      candidates.each do |mod|
+        m = Parquet.const_get(mod)
+        return m.const_get(up) if m.const_defined?(up)
+      rescue StandardError
+        next
+      end
+      nil
+    end
+
+    def normalize_parquet_compression_name(requested)
+      return nil if requested.nil?
+
+      s = requested.to_s.downcase
+      return 'none' if s == 'none'
+      return 'gzip' if s == 'gzip'
+      return 'snappy' if s == 'snappy'
+      return 'zstd' if %w[zstd zstandard].include?(s)
+
+      nil
     end
   end
 end

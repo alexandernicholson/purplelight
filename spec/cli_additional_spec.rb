@@ -382,3 +382,122 @@ RSpec.describe 'CLI additional end-to-end' do
     end
   end
 end
+
+RSpec.describe 'CLI additional behaviors' do
+  def docker?
+    system('docker --version > /dev/null 2>&1')
+  end
+
+  def wait_for_mongo(url, timeout: 60)
+    start = Time.now
+    loop do
+      client = Mongo::Client.new(url, server_api: { version: '1' })
+      client.database.command(hello: 1)
+      return true
+    rescue StandardError => _e
+      break if (Time.now - start) > timeout
+
+      sleep 1
+    end
+    false
+  end
+
+  def arrow_available?
+    require 'arrow'
+    require 'parquet'
+    true
+  rescue LoadError
+    false
+  end
+
+  def read_text_lines(path, max_lines: nil)
+    lines = []
+    if path.end_with?('.gz')
+      Zlib::GzipReader.open(path) { |gz| lines = gz.each_line.to_a }
+    elsif path.end_with?('.zst')
+      if Object.const_defined?(:Zstd)
+        data = Zstd.decompress(File.binread(path))
+        lines = StringIO.new(data).each_line.to_a
+      elsif defined?(ZSTDS)
+        ZSTDS::Stream::Reader.open(path) do |zr|
+          data = zr.read
+          lines = StringIO.new(data).each_line.to_a
+        end
+      else
+        raise 'zstd output produced but no zstd reader is available'
+      end
+    else
+      File.open(path, 'r') { |f| lines = f.each_line.to_a }
+    end
+    max_lines ? lines.first(max_lines) : lines
+  end
+
+  let(:bin) { File.expand_path('../bin/purplelight', __dir__) }
+
+  it 'Purplelight snapshot uses multiple MongoDB connections under concurrency' do
+    Dir.mktmpdir('purplelight-snapshot-conn') do |dir|
+      container = nil
+      begin
+        mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017/?maxPoolSize=16'
+        unless ENV['MONGO_URL']
+          raise 'Mongo not available (no MONGO_URL and no Docker)' unless system('docker --version > /dev/null 2>&1')
+
+          container = "pl-mongo-pool-#{Time.now.to_i}"
+          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+        end
+        # Wait for server
+        start = Time.now
+        loop do
+          Mongo::Client.new(mongo_url, server_api: { version: '1' }).database.command(hello: 1)
+          break
+        rescue StandardError
+          raise 'Mongo not reachable' if (Time.now - start) > 60
+
+          sleep 1
+        end
+
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
+        coll = client[:pool_probe]
+        coll.drop
+        # Insert enough docs to keep readers busy
+        coll.insert_many(20_000.times.map { |i| { _id: BSON::ObjectId.new, i: i } })
+
+        # Baseline connection count
+        base_conn = client.database.command(serverStatus: 1).first.dig('connections', 'current').to_i
+        peak_conn = base_conn
+        done = false
+
+        # Run Purplelight with multiple partitions (drives concurrent readers)
+        snap_thread = Thread.new do
+          Purplelight.snapshot(
+            client: client,
+            collection: :pool_probe,
+            output: dir,
+            format: :jsonl,
+            partitions: 8,
+            batch_size: 2000,
+            sharding: { mode: :by_size, part_bytes: 32 * 1024 * 1024, prefix: 'pool_probe' },
+            resume: { enabled: true }
+          )
+        ensure
+          done = true
+        end
+
+        # Sample serverStatus during snapshot to observe connection usage rising above baseline
+        deadline = Time.now + 60
+        until done || Time.now > deadline
+          cur = client.database.command(serverStatus: 1).first.dig('connections', 'current').to_i
+          peak_conn = [peak_conn, cur].max
+          sleep 0.1
+        end
+        snap_thread.join
+
+        expect(peak_conn).to be > base_conn
+        parts = Dir[File.join(dir, 'pool_probe-part-*.jsonl*')]
+        expect(parts).not_to be_empty
+      ensure
+        system("docker rm -f #{container} > /dev/null 2>&1") if container
+      end
+    end
+  end
+end

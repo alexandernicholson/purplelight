@@ -137,8 +137,8 @@ module Purplelight
                  single_file = @sharding && @sharding[:mode].to_s == 'single_file'
                  row_group = @parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i || WriterParquet::DEFAULT_ROW_GROUP_SIZE
                  WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger,
-                          manifest: manifest, single_file: single_file, row_group_size: row_group,
-                          rotate_rows: @parquet_max_rows)
+                                   manifest: manifest, single_file: single_file, row_group_size: row_group,
+                                   rotate_rows: @parquet_max_rows)
                else
                  raise ArgumentError, "format not implemented: #{@format}"
                end
