@@ -15,7 +15,7 @@ module Purplelight
     DEFAULT_ROW_GROUP_SIZE = 10_000
 
     def initialize(directory:, prefix:, compression: :zstd, row_group_size: DEFAULT_ROW_GROUP_SIZE, logger: nil,
-                   manifest: nil, single_file: true, schema: nil)
+                   manifest: nil, single_file: true, schema: nil, rotate_rows: nil)
       @directory = directory
       @prefix = prefix
       @compression = compression
@@ -24,11 +24,13 @@ module Purplelight
       @manifest = manifest
       @single_file = single_file
       @schema = schema
+      @rotate_rows = rotate_rows
 
       @closed = false
       @file_seq = 0
       @part_index = nil
       @pq_writer = nil
+      @rows_in_current_file = 0
 
       ensure_dependencies!
       reset_buffers
@@ -44,9 +46,8 @@ module Purplelight
     def close
       return if @closed
 
-      ensure_open!
       flush_all_row_groups
-      finalize_current_part!
+      finalize_current_part! if @writer_path
       @closed = true
     end
 
@@ -70,6 +71,7 @@ module Purplelight
       FileUtils.mkdir_p(@directory)
       @writer_path = next_part_path
       @part_index = @manifest&.open_part!(@writer_path) if @manifest
+      @rows_in_current_file = 0
     end
 
     # No-op; we now write once on close for simplicity
@@ -108,6 +110,7 @@ module Purplelight
     end
 
     def finalize_current_part!
+      return if @writer_path.nil?
       if @pq_writer
         @pq_writer.close
         @pq_writer = nil
@@ -115,6 +118,8 @@ module Purplelight
       @manifest&.complete_part!(index: @part_index, checksum: nil)
       @file_seq += 1 unless @single_file
       @writer_path = nil
+      @part_index = nil
+      @rows_in_current_file = 0
     end
 
     def next_part_path
@@ -147,6 +152,7 @@ module Purplelight
       return if @buffer_docs.empty?
 
       while @buffer_docs.length >= @row_group_size
+        ensure_open!
         group = @buffer_docs.shift(@row_group_size)
         t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
         table = build_table(group)
@@ -155,6 +161,8 @@ module Purplelight
         t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
         write_table(table, @writer_path, append: true)
         Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
+        @rows_in_current_file += group.length
+        maybe_rotate!
       end
     end
 
@@ -171,9 +179,21 @@ module Purplelight
       Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
 
       t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
+      ensure_open!
       write_table(table, @writer_path, append: true)
       Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
       @buffer_docs.clear
+      @rows_in_current_file += table.n_rows if table.respond_to?(:n_rows)
+      @rows_in_current_file += @buffer_docs.length unless table.respond_to?(:n_rows)
+      maybe_rotate!
+    end
+
+    def maybe_rotate!
+      return if @single_file
+      return unless @rotate_rows && @rows_in_current_file >= @rotate_rows
+
+      finalize_current_part!
+      # Next write will open a new part
     end
   end
 end

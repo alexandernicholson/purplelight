@@ -144,6 +144,29 @@ Purplelight.snapshot(
 )
 ```
 
+Parquet multi-part (rows-based rotation):
+
+```ruby
+Purplelight.snapshot(
+  client: client,
+  collection: 'users',
+  output: '/data/exports',
+  format: :parquet,
+  # Any mode other than :single_file enables multi-part filenames for Parquet
+  sharding: { mode: :by_size, prefix: 'users_parquet_parts' },
+  # Split into multiple .parquet files, limiting rows per file
+  parquet_max_rows: 100_000,
+  # Optional: Parquet row group size (rows)
+  parquet_row_group: 10_000,
+  resume: { enabled: true }
+)
+```
+
+Notes for Parquet:
+- Parquet multi-part sizing is controlled by rows via `parquet_max_rows`.
+- `--rotate-mb` / `part_bytes` do not affect Parquet part size; they apply to JSONL/CSV.
+- Use `sharding: { mode: :single_file }` to force a single `.parquet` file.
+
 ### Environment variables (optional)
 
 CLI flags take precedence, but these environment variables can set sensible defaults:
@@ -199,6 +222,8 @@ bundle exec bin/purplelight \
 Notes:
 - Compression backend selection order is: requested format → `zstd-ruby` → `zstds` → `gzip`.
 - `--single-file` and `--by-size` update only the sharding mode/params and preserve any provided `--prefix`.
+- Parquet multi-part sizing is programmatic via `parquet_max_rows`; there is no CLI flag for it.
+- To increase concurrent connections, set `maxPoolSize` on your Mongo URI (used by `--uri`), e.g., `mongodb://.../?maxPoolSize=32`. A good starting point is `maxPoolSize >= --partitions`.
 
 ### Architecture
 
@@ -236,6 +261,7 @@ Key points:
 - **Rotation size**: larger (512MB–1GB) reduces finalize overhead for many parts. CLI: `--rotate-mb` (and/or `--by-size`).
 - **JSONL chunking**: tune builder write chunk size for throughput. CLI: `--write-chunk-mb`.
 - **Parquet row groups**: choose a row group size that fits downstream readers. CLI: `--parquet-row-group`.
+- **Parquet parts (rows)**: split Parquet outputs by rows with `parquet_max_rows` (programmatic API). Set `sharding.mode` to anything other than `:single_file` to enable multi-part filenames.
 - **Read preference**: offload to secondaries or tagged analytics nodes when available. CLI: `--read-preference`, `--read-tags`.
 - **Read concern**: pick an appropriate level for consistency/latency trade-offs. CLI: `--read-concern`.
 - **Cursor timeout**: for very long scans, leave `noCursorTimeout` enabled. CLI: `--no-cursor-timeout true|false`.

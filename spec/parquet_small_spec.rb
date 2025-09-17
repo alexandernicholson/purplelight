@@ -122,4 +122,48 @@ RSpec.describe 'Parquet small collections (requires Arrow/Parquet)' do
       end
     end
   end
+
+  it 'rotates Parquet into multiple parts when parquet_max_rows is set' do
+    Dir.mktmpdir('purplelight-parquet-rotate') do |dir|
+      container = nil
+      mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
+      begin
+        unless ENV['MONGO_URL']
+          raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
+          container = "pl-mongo-parquet3-#{Time.now.to_i}"
+          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+        end
+        raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
+
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
+        coll = client[:tiny_pq_rotate]
+        # Insert 10 small docs
+        docs = 10.times.map { |i| { _id: BSON::ObjectId.new, email: "r#{i}@ex.com", active: true, n: i } }
+        coll.insert_many(docs)
+
+        Purplelight.snapshot(
+          client: client,
+          collection: :tiny_pq_rotate,
+          output: dir,
+          format: :parquet,
+          sharding: { mode: :by_size, part_bytes: 64 * 1024 * 1024, prefix: 'tiny_parquet_rotate' },
+          parquet_max_rows: 3,
+          parquet_row_group: 2,
+          resume: { enabled: true }
+        )
+
+        pq_parts = Dir[File.join(dir, 'tiny_parquet_rotate-part-*.parquet')]
+        expect(pq_parts.size).to be >= 4 # 10 rows with max_rows=3 -> at least 4 files
+
+        # Validate each part has rows <= 3
+        pq_parts.each do |path|
+          table = Arrow::Table.load(path, format: :parquet)
+          expect(table.n_rows).to be <= 3
+        end
+      ensure
+        system("docker rm -f #{container} > /dev/null 2>&1") if container
+      end
+    end
+  end
 end
