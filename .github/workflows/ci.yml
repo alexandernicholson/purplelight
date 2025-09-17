@@ -52,3 +52,10 @@ jobs:
           BENCH: '1'
         run: |
           bundle exec rspec spec/benchmark_perf_spec.rb --format doc
+
+      - name: Run benchmark (Parquet)
+        env:
+          BENCH: '1'
+          BENCH_FORMAT: parquet
+        run: |
+          bundle exec rspec spec/benchmark_perf_spec.rb --format doc
