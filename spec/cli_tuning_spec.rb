@@ -114,6 +114,49 @@ RSpec.describe 'CLI tunables via flags' do
     end
   end
 
+  it 'records --parquet-max-rows in manifest options' do
+    Dir.mktmpdir('purplelight-cli-parquet-max-rows') do |dir|
+      container = nil
+      mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
+      db_name = 'db'
+      coll_name = "cli_parquet_max_rows_#{Time.now.to_i}"
+      prefix = 'pqmax'
+      begin
+        unless ENV['MONGO_URL']
+          raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
+          container = "pl-mongo-cli-pqmax-#{Time.now.to_i}"
+          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+        end
+        raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
+
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' }).use(db_name)
+        coll = client[coll_name.to_sym]
+        coll.insert_many(3.times.map { { _id: BSON::ObjectId.new, v: 1 } })
+
+        # Use format jsonl to avoid requiring Arrow/Parquet, we only assert manifest options
+        cmd = [
+          bin,
+          "--uri #{mongo_url}",
+          "--db #{db_name}",
+          "--collection #{coll_name}",
+          "--output #{dir}",
+          "--prefix #{prefix}",
+          '--format jsonl',
+          '--parquet-max-rows 123'
+        ].join(' ')
+        `#{cmd}`
+        expect($CHILD_STATUS.success?).to be true
+
+        manifest_path = File.join(dir, "#{prefix}.manifest.json")
+        data = JSON.parse(File.read(manifest_path))
+        expect(data['options']['parquet_max_rows']).to eq(123)
+      ensure
+        system("docker rm -f #{container} > /dev/null 2>&1") if container
+      end
+    end
+  end
+
   it 'applies --parquet-row-group when format=parquet (if Arrow available)' do
     begin
       require 'arrow'
@@ -158,6 +201,66 @@ RSpec.describe 'CLI tunables via flags' do
         manifest_path = File.join(dir, "#{prefix}.manifest.json")
         data = JSON.parse(File.read(manifest_path))
         expect(data['options']['parquet_row_group']).to eq(12_345)
+      ensure
+        system("docker rm -f #{container} > /dev/null 2>&1") if container
+      end
+    end
+  end
+
+  it 'rotates Parquet parts when --parquet-max-rows is set (if Arrow available)' do
+    begin
+      require 'arrow'
+      require 'parquet'
+    rescue LoadError
+      skip 'Arrow not available'
+    end
+
+    Dir.mktmpdir('purplelight-cli-parquet-rotate') do |dir|
+      container = nil
+      mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'
+      db_name = 'db'
+      coll_name = "cli_pq_rotate_#{Time.now.to_i}"
+      prefix = 'pqrot'
+      begin
+        unless ENV['MONGO_URL']
+          raise 'Mongo not available (no MONGO_URL and no Docker)' unless docker?
+
+          container = "pl-mongo-cli-pqrot-#{Time.now.to_i}"
+          system("docker run -d --rm --name #{container} -p 27017:27017 mongo:7 > /dev/null") or raise 'failed to start docker'
+        end
+        raise 'Mongo not reachable' unless wait_for_mongo(mongo_url, timeout: 60)
+
+        client = Mongo::Client.new(mongo_url, server_api: { version: '1' }).use(db_name)
+        coll = client[coll_name.to_sym]
+        # Insert enough docs to trigger multiple parts with small max-rows
+        coll.insert_many(7.times.map { |i| { _id: BSON::ObjectId.new, n: i } })
+
+        cmd = [
+          bin,
+          "--uri #{mongo_url}",
+          "--db #{db_name}",
+          "--collection #{coll_name}",
+          "--output #{dir}",
+          "--prefix #{prefix}",
+          '--format parquet',
+          # Small row group to exercise boundary crossing logic
+          '--parquet-row-group 2',
+          # Rotate every 3 rows; expect 3 parts for 7 rows: 3,3,1
+          '--parquet-max-rows 3'
+        ].join(' ')
+        `#{cmd}`
+        expect($CHILD_STATUS.success?).to be true
+
+        parts = Dir[File.join(dir, "#{prefix}-part-*.parquet")]
+        expect(parts.size).to be >= 3
+
+        # Manifest should reflect rows per part not exceeding max
+        manifest_path = File.join(dir, "#{prefix}.manifest.json")
+        data = JSON.parse(File.read(manifest_path))
+        rows_per_part = data.fetch('parts', []).map { |p| p['rows'].to_i }
+        expect(rows_per_part).not_to be_empty
+        rows_per_part[0...-1].each { |r| expect(r).to be <= 3 }
+        expect(rows_per_part.sum).to eq(7)
       ensure
         system("docker rm -f #{container} > /dev/null 2>&1") if container
       end

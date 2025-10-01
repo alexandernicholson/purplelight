@@ -9,7 +9,7 @@ Purplelight is published on RubyGems: [purplelight on RubyGems](https://rubygems
 Add to your Gemfile:
 
 ```ruby
-gem 'purplelight', '~> 0.1.12'
+gem 'purplelight', '~> 0.1.13'
 ```
 
 Or install directly:
@@ -212,6 +212,7 @@ bundle exec bin/purplelight \
 - `--read-concern LEVEL`: `majority|local|linearizable|available|snapshot`.
 - `--no-cursor-timeout BOOL`: Toggle `noCursorTimeout` (default true).
 - `--parquet-row-group N`: Parquet row group size (rows).
+- `--parquet-max-rows N`: Parquet max rows per part (enables multi-part when not `--single-file`).
 - `--write-chunk-mb MB`: JSONL encode/write chunk size before enqueueing.
 - `--writer-threads N` (experimental): Number of writer threads (JSONL only).
 - `--telemetry on|off`: Force enable/disable telemetry output.
@@ -222,7 +223,7 @@ bundle exec bin/purplelight \
 Notes:
 - Compression backend selection order is: requested format → `zstd-ruby` → `zstds` → `gzip`.
 - `--single-file` and `--by-size` update only the sharding mode/params and preserve any provided `--prefix`.
-- Parquet multi-part sizing is programmatic via `parquet_max_rows`; there is no CLI flag for it.
+– Parquet multi-part sizing can be controlled via `parquet_max_rows` programmatically, or via CLI `--parquet-max-rows`.
 - To increase concurrent connections, set `maxPoolSize` on your Mongo URI (used by `--uri`), e.g., `mongodb://.../?maxPoolSize=32`. A good starting point is `maxPoolSize >= --partitions`.
 
 ### Architecture
