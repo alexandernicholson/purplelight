@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-21T09:55:57Z",
+  "generated_at": "2026-07-21T12:41:06Z",
   "coverage": {
     "covered": [
       "manifest",
@@ -320,33 +320,47 @@
       "allocated_objects": 0,
       "allocations_per_operation": 0.0
     },
-    "parquet_bson_value": {
-      "iterations": 100000,
-      "seconds": 0.129332,
+    "parquet_object_id_array": {
+      "iterations": 1000,
+      "seconds": 0.237818,
       "sample_seconds": [
-        0.025741,
-        0.025057,
-        0.025474,
-        0.025726,
-        0.027334
+        0.048408,
+        0.044886,
+        0.056985,
+        0.043491,
+        0.044048
       ],
-      "operations_per_second": 3887118.11,
-      "allocated_objects": 300000,
-      "allocations_per_operation": 3.0
+      "operations_per_second": 22278.66,
+      "allocated_objects": 64000,
+      "allocations_per_operation": 64.0
     },
     "parquet_batch_write": {
       "iterations": 10,
-      "seconds": 0.173965,
+      "seconds": 0.049999,
       "sample_seconds": [
-        0.032669,
-        0.031378,
-        0.034728,
-        0.044198,
-        0.030992
+        0.010937,
+        0.00987,
+        0.009626,
+        0.00971,
+        0.009856
       ],
-      "operations_per_second": 306.1,
-      "allocated_objects": 122810,
-      "allocations_per_operation": 12281.0
+      "operations_per_second": 1014.61,
+      "allocated_objects": 18692,
+      "allocations_per_operation": 1869.2
+    },
+    "parquet_row_group_write": {
+      "iterations": 2,
+      "seconds": 0.18688,
+      "sample_seconds": [
+        0.03926,
+        0.036353,
+        0.037264,
+        0.03747,
+        0.036533
+      ],
+      "operations_per_second": 53.67,
+      "allocated_objects": 68880,
+      "allocations_per_operation": 34440.0
     }
   }
 }

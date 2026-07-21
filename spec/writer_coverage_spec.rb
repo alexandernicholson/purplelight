@@ -323,6 +323,90 @@ RSpec.describe 'writer path coverage' do
       end
     end
 
+    it 'round trips nullable primitive and list columns across row groups' do
+      Dir.mktmpdir do |directory|
+        object_ids = 3.times.map { |index| BSON::ObjectId.from_string(format('%024x', index + 1)) }
+        documents = [
+          {
+            '_id' => object_ids[0], 'mixed_id' => object_ids[0],
+            'u8' => 0, 'u16' => 0, 'u32' => 0, 'u64' => 0,
+            'i8' => -128, 'i16' => -129, 'i32' => -32_769, 'i64' => -2_147_483_649,
+            'too_large' => 18_446_744_073_709_551_616, 'too_small' => -9_223_372_036_854_775_809,
+            'active' => true, 'ratio' => 1.25, 'name' => 'alpha', 'nested' => { 'x' => 1 },
+            'tags' => %w[a b], 'numbers' => [1, 2], 'nested_numbers' => [[1], [2]],
+            'object_ids' => [object_ids[0]],
+            'hashes' => [{ 'x' => 1 }], 'mixed_numeric' => 1, 'mixed_float' => 1.5,
+            'empty_lists' => [], 'date' => Date.new(2026, 1, 1)
+          },
+          {
+            '_id' => object_ids[1], 'mixed_id' => 'literal',
+            'u8' => 255, 'u16' => 256, 'u32' => 65_536, 'u64' => 4_294_967_296,
+            'i8' => 127, 'i16' => 32_767, 'i32' => 2_147_483_647, 'i64' => 9_223_372_036_854_775_807,
+            'too_large' => 18_446_744_073_709_551_616, 'too_small' => -9_223_372_036_854_775_809,
+            'active' => false, 'ratio' => -2.5, 'name' => '', 'nested' => { 'x' => 2 },
+            'tags' => [], 'numbers' => [], 'nested_numbers' => [[]],
+            'object_ids' => [object_ids[1]],
+            'hashes' => [{ 'x' => 2 }], 'mixed_numeric' => 2.5, 'mixed_float' => 2,
+            'empty_lists' => [], 'date' => Date.new(2026, 1, 2)
+          },
+          {
+            '_id' => nil, 'mixed_id' => nil,
+            'u8' => nil, 'u16' => nil, 'u32' => nil, 'u64' => nil,
+            'i8' => nil, 'i16' => nil, 'i32' => nil, 'i64' => nil,
+            'too_large' => nil, 'too_small' => nil,
+            'active' => nil, 'ratio' => nil, 'name' => nil, 'nested' => nil,
+            'tags' => nil, 'numbers' => nil, 'nested_numbers' => nil,
+            'object_ids' => nil,
+            'hashes' => nil, 'mixed_numeric' => nil, 'mixed_float' => nil,
+            'empty_lists' => nil, 'date' => nil
+          },
+          {
+            '_id' => object_ids[2], 'mixed_id' => object_ids[2],
+            'u8' => 7, 'u16' => 7, 'u32' => 7, 'u64' => 7,
+            'i8' => 7, 'i16' => 7, 'i32' => 7, 'i64' => 7,
+            'too_large' => 18_446_744_073_709_551_616, 'too_small' => -9_223_372_036_854_775_809,
+            'active' => true, 'ratio' => 3.5, 'name' => 'omega', 'nested' => { 'x' => 4 },
+            'tags' => ['c'], 'numbers' => [3], 'nested_numbers' => [[3]],
+            'object_ids' => [object_ids[2]],
+            'hashes' => [{ 'x' => 4 }], 'mixed_numeric' => 3.5, 'mixed_float' => 4.5,
+            'empty_lists' => [], 'date' => Date.new(2026, 1, 4)
+          }
+        ]
+        writer = described_class.new(directory:, prefix: 'types', compression: :zstd, row_group_size: 2)
+        writer.write_many(documents)
+        writer.close
+
+        table = Arrow::Table.load(File.join(directory, 'types.parquet'), format: :parquet)
+        normalize = lambda do |value|
+          value.is_a?(Arrow::Array) ? value.to_a.map { |item| normalize.call(item) } : value
+        end
+        actual = table.column_names.to_h do |name|
+          [name, table[name].to_a.map { |value| normalize.call(value) }]
+        end
+        expected = documents.first.keys.to_h { |name| [name, documents.map { |document| document[name] }] }
+        %w[_id mixed_id too_large too_small nested empty_lists].each do |name|
+          expected[name] = expected[name].map { |value| value&.to_s }
+        end
+        expected['hashes'] = expected['hashes'].map { |values| values&.map(&:to_s) }
+        expected['object_ids'] = expected['object_ids'].map { |values| values&.map(&:to_s) }
+        expected['mixed_numeric'] = expected['mixed_numeric'].map { |value| value&.to_f }
+        expected['mixed_float'] = expected['mixed_float'].map { |value| value&.to_f }
+
+        expect(actual).to eq(expected)
+      end
+    end
+
+    it 'rejects integer values that outgrow the inferred row-group schema' do
+      Dir.mktmpdir do |directory|
+        writer = described_class.new(directory:, prefix: 'integer-overflow', compression: :none, row_group_size: 2)
+        writer.write_many([{ 'value' => 0 }, { 'value' => 255 }])
+        expect do
+          writer.write_many([{ 'value' => 256 }, { 'value' => 1 }])
+        end.to raise_error(RangeError, /integer range 1\.\.256 exceeds/)
+        writer.close
+      end
+    end
+
     it 'pre-rotates final groups and rotates exact-size final files' do
       Dir.mktmpdir do |directory|
         pre_rotate = described_class.new(directory:, prefix: 'pre', compression: :none, row_group_size: 3,

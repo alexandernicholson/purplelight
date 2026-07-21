@@ -61,6 +61,8 @@ module Purplelight
       @buffer_docs = []
       @columns = nil
       @buffer_head = 0
+      @arrow_schema = nil
+      @arrow_data_types = nil
       @writer_path = nil
     end
 
@@ -75,23 +77,224 @@ module Purplelight
 
     # No-op; we now write once on close for simplicity
 
-    def build_table(docs)
-      # Infer columns
-      @columns ||= infer_columns(docs)
-      columns = {}
-      @columns.each do |name|
-        values = docs.map { |d| extract_value(d, name) }
-        columns[name] = Arrow::ArrayBuilder.build(values)
+    def build_record_batch(documents)
+      @columns ||= infer_columns(documents)
+      arrays = @columns.each_with_index.map do |name, index|
+        values = documents.map { |document| extract_value(document, name) }
+        build_arrow_array(values, @arrow_data_types&.at(index))
       end
-      Arrow::Table.new(columns)
+      batch = if @arrow_schema
+                Arrow::RecordBatch.new(@arrow_schema, arrays)
+              else
+                Arrow::RecordBatch.new(@columns.zip(arrays).to_h)
+              end
+      unless @arrow_schema
+        @arrow_schema = batch.schema
+        @arrow_data_types = @arrow_schema.fields.map(&:data_type)
+      end
+      batch
     end
 
-    def write_table(table, path, append: false) # rubocop:disable Lint/UnusedMethodArgument
+    def build_arrow_array(values, data_type = nil)
+      first = values.find { |value| !value.nil? }
+      if first.is_a?(BSON::ObjectId)
+        return build_object_id_array(values) if values.all? { |value| value.nil? || value.is_a?(BSON::ObjectId) }
+
+        return build_string_array(values)
+      end
+      return build_string_array(values) if data_type.is_a?(Arrow::StringDataType) ||
+                                           first.is_a?(String) || first.is_a?(Hash)
+      if (data_type.is_a?(Arrow::ListDataType) || first.is_a?(Array)) &&
+         values.all? { |value| value.nil? || value.is_a?(Array) } &&
+         (data_type || values.any? { |value| value && !value.empty? })
+        return build_list_array(values, data_type)
+      end
+      if (data_type.is_a?(Arrow::BooleanDataType) || first.equal?(true) || first.equal?(false)) &&
+         values.all? { |value| value.nil? || value.equal?(true) || value.equal?(false) }
+        return build_boolean_array(values)
+      end
+
+      integer_spec = integer_array_spec(data_type)
+      integer_values = (integer_spec || first.is_a?(Integer)) &&
+                       values.all? { |value| value.nil? || value.is_a?(Integer) }
+      return build_integer_array(values, data_type, integer_spec) if integer_values
+      if (data_type.is_a?(Arrow::DoubleDataType) || first.is_a?(Float)) &&
+         values.all? { |value| value.nil? || value.is_a?(Float) }
+        return build_double_array(values)
+      end
+
+      data_type ? data_type.build_array(values) : Arrow::ArrayBuilder.build(values)
+    end
+
+    def build_string_array(values)
+      offsets = Array.new(values.length + 1, 0)
+      data = +''.b
+      values.each_with_index do |value, index|
+        data << (value.is_a?(String) ? value : value.to_s) unless value.nil?
+        offsets[index + 1] = data.bytesize
+      end
+      validity, null_count = build_validity(values)
+      Arrow::StringArray.new(
+        values.length,
+        Arrow::Buffer.new(offsets.pack('l<*').freeze),
+        Arrow::Buffer.new(data.freeze),
+        validity,
+        null_count
+      )
+    end
+
+    def build_object_id_array(values)
+      offsets = Array.new(values.length + 1, 0)
+      raw = String.new(capacity: values.length * 12, encoding: Encoding::BINARY)
+      values.each_with_index do |value, index|
+        # #marshal_dump is BSON's public accessor for an ObjectId's 12 raw bytes.
+        raw << value.marshal_dump if value
+        offsets[index + 1] = raw.bytesize * 2
+      end
+      data = raw.unpack1('H*').force_encoding(Encoding::UTF_8)
+      validity, null_count = build_validity(values)
+      Arrow::StringArray.new(
+        values.length,
+        Arrow::Buffer.new(offsets.pack('l<*').freeze),
+        Arrow::Buffer.new(data.freeze),
+        validity,
+        null_count
+      )
+    end
+
+    def build_list_array(values, data_type)
+      offsets = Array.new(values.length + 1, 0)
+      flattened = []
+      values.each_with_index do |value, index|
+        flattened.concat(value) if value
+        offsets[index + 1] = flattened.length
+      end
+      child_type = data_type&.field&.data_type
+      child = build_arrow_array(flattened, child_type)
+      data_type ||= Arrow::ListDataType.new(child.value_data_type)
+      validity, null_count = build_validity(values)
+      Arrow::ListArray.new(
+        data_type,
+        values.length,
+        Arrow::Buffer.new(offsets.pack('l<*').freeze),
+        child,
+        validity,
+        null_count
+      )
+    end
+
+    def build_boolean_array(values)
+      data = "\0".b * ((values.length + 7) / 8)
+      values.each_with_index do |value, index|
+        next unless value
+
+        byte_index = index >> 3
+        data.setbyte(byte_index, data.getbyte(byte_index) | (1 << (index & 7)))
+      end
+      validity, null_count = build_validity(values)
+      Arrow::BooleanArray.new(values.length, Arrow::Buffer.new(data.freeze), validity, null_count)
+    end
+
+    def build_integer_array(values, data_type, spec)
+      non_null_values = values.compact
+      minimum, maximum = non_null_values.minmax
+      data_type ||= infer_integer_data_type(minimum, maximum)
+      spec ||= integer_array_spec(data_type)
+      return Arrow::ArrayBuilder.build(values) unless spec
+
+      array_class, pack_directive, lower_bound, upper_bound = spec
+      outside_bounds = minimum && (minimum < lower_bound || maximum > upper_bound)
+      raise RangeError, "integer range #{minimum}..#{maximum} exceeds #{data_type}" if outside_bounds
+
+      packed_values = if non_null_values.length == values.length
+                        values
+                      else
+                        values.map { |value| value.nil? ? 0 : value }
+                      end
+      validity, null_count = build_validity(values)
+      array_class.new(
+        values.length,
+        Arrow::Buffer.new(packed_values.pack(pack_directive).freeze),
+        validity,
+        null_count
+      )
+    end
+
+    def build_double_array(values)
+      packed_values = if values.include?(nil)
+                        values.map { |value| value.nil? ? 0.0 : value }
+                      else
+                        values
+                      end
+      validity, null_count = build_validity(values)
+      Arrow::DoubleArray.new(
+        values.length,
+        Arrow::Buffer.new(packed_values.pack('E*').freeze),
+        validity,
+        null_count
+      )
+    end
+
+    def build_validity(values)
+      null_count = values.count(nil)
+      return [nil, 0] if null_count.zero?
+
+      bytes = "\0".b * ((values.length + 7) / 8)
+      values.each_with_index do |value, index|
+        next if value.nil?
+
+        byte_index = index >> 3
+        bytes.setbyte(byte_index, bytes.getbyte(byte_index) | (1 << (index & 7)))
+      end
+      [Arrow::Buffer.new(bytes.freeze), null_count]
+    end
+
+    def infer_integer_data_type(minimum, maximum)
+      if minimum.negative?
+        return Arrow::Int8DataType.new if minimum >= -128 && maximum <= 127
+        return Arrow::Int16DataType.new if minimum >= -32_768 && maximum <= 32_767
+        return Arrow::Int32DataType.new if minimum >= -2_147_483_648 && maximum <= 2_147_483_647
+
+        int64_range = minimum >= -9_223_372_036_854_775_808 && maximum <= 9_223_372_036_854_775_807
+        return Arrow::Int64DataType.new if int64_range
+      else
+        return Arrow::UInt8DataType.new if maximum <= 255
+        return Arrow::UInt16DataType.new if maximum <= 65_535
+        return Arrow::UInt32DataType.new if maximum <= 4_294_967_295
+        return Arrow::UInt64DataType.new if maximum <= 18_446_744_073_709_551_615
+      end
+      nil
+    end
+
+    def integer_array_spec(data_type)
+      case data_type
+      when Arrow::UInt8DataType
+        [Arrow::UInt8Array, 'C*', 0, 255]
+      when Arrow::UInt16DataType
+        [Arrow::UInt16Array, 'S<*', 0, 65_535]
+      when Arrow::UInt32DataType
+        [Arrow::UInt32Array, 'L<*', 0, 4_294_967_295]
+      when Arrow::UInt64DataType
+        [Arrow::UInt64Array, 'Q<*', 0, 18_446_744_073_709_551_615]
+      when Arrow::Int8DataType
+        [Arrow::Int8Array, 'c*', -128, 127]
+      when Arrow::Int16DataType
+        [Arrow::Int16Array, 's<*', -32_768, 32_767]
+      when Arrow::Int32DataType
+        [Arrow::Int32Array, 'l<*', -2_147_483_648, 2_147_483_647]
+      when Arrow::Int64DataType
+        [Arrow::Int64Array, 'q<*', -9_223_372_036_854_775_808, 9_223_372_036_854_775_807]
+      end
+    end
+
+    def write_record_batch(batch, path)
       unless @pq_writer
         properties = build_writer_properties_for_compression(@compression)
-        @pq_writer = Parquet::ArrowFileWriter.open(table.schema, path, properties)
+        properties ||= Parquet::WriterProperties.new
+        properties.max_row_group_length = @row_group_size
+        @pq_writer = Parquet::ArrowFileWriter.open(batch.schema, path, properties)
       end
-      @pq_writer.write(table, chunk_size: @row_group_size)
+      @pq_writer.write(batch)
     end
 
     def finalize_current_part!
@@ -125,9 +328,6 @@ module Purplelight
     def extract_value(doc, key)
       value = doc[key]
       value = doc[key.to_sym] if value.nil? && !doc.key?(key)
-      # Normalize common MongoDB/BSON types to Parquet-friendly values
-      return value.to_s if value.is_a?(BSON::ObjectId)
-
       value
     end
 
@@ -142,11 +342,11 @@ module Purplelight
           remaining_allowed = @rotate_rows - @rows_in_current_file
           part_a = group.first(remaining_allowed)
           t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
-          table_a = build_table(part_a)
+          batch_a = build_record_batch(part_a)
           Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
 
           t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
-          write_table(table_a, @writer_path, append: true)
+          write_record_batch(batch_a, @writer_path)
           Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
           @manifest&.add_progress_to_part!(index: @part_index, rows_delta: part_a.length, bytes_delta: 0)
           @rows_in_current_file += part_a.length
@@ -156,21 +356,21 @@ module Purplelight
 
           part_b = group.drop(remaining_allowed)
           t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
-          table_b = build_table(part_b)
+          batch_b = build_record_batch(part_b)
           Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
 
           t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
-          write_table(table_b, @writer_path, append: true)
+          write_record_batch(batch_b, @writer_path)
           Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
           @manifest&.add_progress_to_part!(index: @part_index, rows_delta: part_b.length, bytes_delta: 0)
           @rows_in_current_file += part_b.length
         else
           t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
-          table = build_table(group)
+          batch = build_record_batch(group)
           Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
 
           t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
-          write_table(table, @writer_path, append: true)
+          write_record_batch(batch, @writer_path)
           Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
           @manifest&.add_progress_to_part!(index: @part_index, rows_delta: group.length, bytes_delta: 0)
           @rows_in_current_file += group.length
@@ -188,7 +388,7 @@ module Purplelight
       # Flush remaining as a final smaller group
       remaining = buffered_count
       t_tbl = Thread.current[:pl_telemetry]&.start(:parquet_table_build_time)
-      table = build_table(take_buffered(remaining))
+      batch = build_record_batch(take_buffered(remaining))
       Thread.current[:pl_telemetry]&.finish(:parquet_table_build_time, t_tbl)
 
       ensure_open!
@@ -199,9 +399,9 @@ module Purplelight
       end
 
       t_w = Thread.current[:pl_telemetry]&.start(:parquet_write_time)
-      write_table(table, @writer_path, append: true)
+      write_record_batch(batch, @writer_path)
       Thread.current[:pl_telemetry]&.finish(:parquet_write_time, t_w)
-      rows_written = table.n_rows
+      rows_written = batch.n_rows
       @manifest&.add_progress_to_part!(index: @part_index, rows_delta: rows_written, bytes_delta: 0)
       @rows_in_current_file += rows_written
       @buffer_docs.clear

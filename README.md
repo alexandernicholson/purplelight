@@ -124,8 +124,8 @@ Add optional dependencies:
 ```ruby
 # Gemfile
 group :parquet do
-  gem 'red-arrow', '~> 15.0'
-  gem 'red-parquet', '~> 15.0'
+  gem 'red-arrow', '>= 24.0'
+  gem 'red-parquet', '>= 24.0'
 end
 ```
 
@@ -166,6 +166,7 @@ Notes for Parquet:
 - Parquet multi-part sizing is controlled by rows via `parquet_max_rows`.
 - `--rotate-mb` / `part_bytes` do not affect Parquet part size; they apply to JSONL/CSV.
 - Use `sharding: { mode: :single_file }` to force a single `.parquet` file.
+- The first row group defines the Arrow schema. Later values must remain type-compatible; integer values outside the inferred width raise `RangeError` instead of wrapping.
 
 ### Environment variables (optional)
 

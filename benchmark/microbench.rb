@@ -19,6 +19,15 @@ DOCS = Array.new(200) do |index|
     'nested' => { 'value' => index }
   }
 end.freeze
+PARQUET_DOCS = Array.new(10_000) do |index|
+  {
+    '_id' => BSON::ObjectId.new,
+    'index' => index,
+    'active' => index.even?,
+    'tags' => %w[alpha beta],
+    'nested' => { 'value' => index }
+  }
+end.freeze
 ENCODED_JSONL = DOCS.map { |document| "#{JSON.generate(document)}\n" }.join * 10
 ENCODED_BATCH = Purplelight::WriterJSONL::EncodedBatch.new(
   data: ENCODED_JSONL,
@@ -305,9 +314,9 @@ Dir.mktmpdir('purplelight-microbench') do |directory|
     parquet_buffer_writer.instance_variable_get(:@buffer_docs).clear
   end
 
-  object_id = BSON::ObjectId.new
-  harness.register('parquet_bson_value', paths: :writer_parquet, iterations: 100_000) do
-    parquet_buffer_writer.send(:extract_value, { '_id' => object_id }, '_id')
+  object_ids = DOCS.map { |document| document.fetch('_id') }.freeze
+  harness.register('parquet_object_id_array', paths: :writer_parquet, iterations: 1_000) do
+    parquet_buffer_writer.send(:build_object_id_array, object_ids)
   end
 
   harness.register('parquet_batch_write', paths: :writer_parquet, iterations: 10) do
@@ -315,6 +324,14 @@ Dir.mktmpdir('purplelight-microbench') do |directory|
     writer = Purplelight::WriterParquet.new(directory:, prefix: "parquet-#{sequence}", compression: :zstd,
                                             row_group_size: 100, single_file: true)
     writer.write_many(DOCS)
+    writer.close
+  end
+
+  harness.register('parquet_row_group_write', paths: :writer_parquet, iterations: 2) do
+    sequence += 1
+    writer = Purplelight::WriterParquet.new(directory:, prefix: "parquet-row-groups-#{sequence}",
+                                            compression: :zstd, row_group_size: 1_000, single_file: true)
+    writer.write_many(PARQUET_DOCS)
     writer.close
   end
 

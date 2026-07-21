@@ -7,7 +7,7 @@ Updated: 2026-07-21
 - Pinned managed development Ruby 4.0.2; no Homebrew Ruby is used.
 - Updated all Ruby 3.2-compatible dependencies: MongoDB Ruby driver 2.24.1, BSON 5.2.0, zstd-ruby 2.0.6, red-arrow/red-parquet 25.0.0, Rake 13.4.2, RSpec 3.13.2, RuboCop 1.88.2, SimpleCov 1.0.2, StackProf 0.2.28, and current transitives. `parallel` remains on 1.28 because 2.x requires Ruby 3.3; `diff-lcs` 2.0 remains blocked by RSpec's `< 2.0` constraint.
 - Updated CI to MongoDB 7 and 8, Ruby 3.2 and 4.0, Apache Arrow 25, and `actions/checkout@v7.0.1`.
-- Added 23 bounded microbenchmarks covering all eight runtime paths. The harness enforces 100% path registration, takes the median of five samples, measures allocations, and aborts each timed sample or allocation pass after two seconds. The slowest observed timed sample was 0.340 seconds.
+- Added 24 bounded microbenchmarks covering all eight runtime paths. The harness enforces 100% path registration, takes the median of five samples, measures allocations, and aborts each timed sample or allocation pass after two seconds. The slowest observed timed sample was 0.386 seconds.
 - Added CPU and object-allocation StackProf tasks plus generated flamegraph support.
 - Added SimpleCov line and branch enforcement. The full suite verifies 100% line and branch coverage, including CLI and MongoDB integration behavior.
 - Added focused behavioral coverage for queue backpressure, manifests, telemetry, partition planning, compression backends, rotations, Parquet row groups, resumability, concurrent JSONL writing, progress, and telemetry output.
@@ -24,9 +24,11 @@ Updated: 2026-07-21
 - JSONL batching honors `batch_size` as well as the 1 MB byte ceiling, bounding latency and memory for small documents.
 - CSV uses an allocation-conscious serializer instead of constructing one `CSV.generate_line` result per row. Confirmed batch throughput improved from 1,211.39 to 1,716.50–1,738.04 operations/second: **+41.7% to +43.5%**.
 - Manifest configuration avoids redundant atomic rewrites. Confirmed progress runs improved from 1,343.24 to 1,753.49–1,764.93 operations/second: **+30.5% to +31.4%**.
-- Parquet uses the red-parquet 25 API directly, applies compression through `Parquet::WriterProperties`, and drains row groups with an indexed buffer instead of repeated front deletion. Final runs reached 296.22–323.08 operations/second versus the initial 203.52: **at least +45.5%**.
+- Parquet now constructs Arrow record batches directly, caches the first row group's schema, packs primitive buffers without per-value GObject calls, preserves requested row-group boundaries through `Parquet::WriterProperties`, and keeps one native writer open per output part. The 200-document benchmark rose from 306.10 to 871.99–1,004.42 operations/second across three runs (**+184.9% to +228.1%**) while allocations fell from 12,281.0 to 2,263.2 per export (**-81.6%**). At 10,000 documents, median throughput rose from 7.23 to 46.71 operations/second (**+545.7%**) and allocations fell from 565,487 to 54,413 (**-90.4%**); output sizes remained unchanged for the compared row-group layouts.
+- Parquet batches each BSON ObjectId column's raw 12-byte values before one hexadecimal conversion, instead of allocating a hexadecimal string and `String#unpack` result per document. Alternating matched runs improved the 200-document export from 918.40 to 982.90 operations/second (**+7.0%**) and cut allocations from 2,266.15 to 1,872.15 (**-17.4%**). The 10,000-document row-group export improved from 47.05 to 50.23 operations/second (**+6.8%**) and from 54,413 to 34,443 allocations (**-36.7%**); a single 10,000-row group improved **+8.3%** with **-39.3%** allocations. Schemas, values, row-group counts, and artifact sizes remained unchanged.
 - Compression defaults were selected from bounded comparisons: zstd level 3 for JSONL, zstd level 9 for CSV, and gzip level 1 for throughput-oriented fallback.
 - CSV manifests count only rows actually written; pre-encoded strings are skipped without inflating progress.
+- Cached integer schemas now reject later values outside their represented range instead of allowing Arrow's integer builder to wrap them silently.
 
 ## Rejected or unnecessary changes
 
@@ -34,12 +36,17 @@ Updated: 2026-07-21
 - A ring-buffer rewrite for ByteQueue was rejected. MRI's front-removal behavior kept the bulk-drain case stable, while the lower-allocation parallel-array representation supplied the retained gain.
 - Alternative CSV gzip and zstd levels that did not produce a repeatable throughput/size improvement were rejected.
 - In-place escaping for nested JSON in CSV was measured and reverted. Dedicated row serialization moved by +2.4% and +3.1% across two runs, so it did not repeatedly clear the 3% threshold.
+- Parquet `RecordBatch` substitution alone, native writer batch-size tuning, dictionary disabling, and extra row-group coalescing did not address the dominant per-value GObject conversion cost and were rejected.
+- Preallocating string capacity, avoiding the integer `compact` copy, borrowing caller buffers, bulk-joining ObjectId bytes, direct native writer calls, caching writer properties, and skipping redundant directory creation each stayed below 3% or regressed and were rejected.
+- Direct three-argument `RecordBatch` construction improved the 200-document case by 7.0% but only -0.6% to +1.9% on the 10,000-document cases, so it was rejected as a first-row-group-only gain that did not persist at scale.
 - No replacement gems or external `alexandernicholson/gems` repository were needed. Current maintained dependencies met the compatibility and measured performance requirements.
 
 ## Follow-up suggestions
 
 - Run the existing opt-in one-million-document load benchmark only on a dedicated, named production-like host; record CPU, storage, MongoDB topology, and compression ratio with every result. It intentionally remains outside the sub-two-second microbenchmark harness.
-- Define schema evolution for CSV and Parquet. Columns are inferred from the first available batch, so fields first appearing in later batches are not added.
+- Define schema evolution for CSV and Parquet. Columns are inferred from the first available batch, so fields first appearing in later batches are not added; an explicit Parquet schema option would also let callers avoid narrow first-row-group integer inference.
+- Further Parquet gains likely require an upstream/native bulk-buffer API: after the retained rewrite, CPU samples were dominated by GObject-introspection constructor calls and the native Parquet writer rather than Ruby row transposition.
+- Nested Ruby hashes now dominate the remaining avoidable Parquet allocations because compatibility requires their existing `Hash#inspect` string representation. An explicit nested Struct/JSON encoding option could remove that cost without silently changing current files.
 - Consider batching or journaling manifest checkpoints for high-latency filesystems. Current per-batch atomic rewrites prioritize resumability over maximum throughput.
 - Define an optional ordering contract if consumers need global document order with multiple JSONL writer threads. Current parts are collision-free and complete, but independently scheduled.
 - Track the 3% regression threshold on a pinned benchmark runner. Compression timings vary with host load and should not become a hard gate on shared CI workers.
