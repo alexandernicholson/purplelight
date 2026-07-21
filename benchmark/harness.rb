@@ -57,16 +57,17 @@ module Purplelight
       end
 
       def measure(benchmark_case)
-        samples, allocated_objects = Timeout.timeout(MAX_CASE_SECONDS) do
-          elapsed = Array.new(SAMPLES) do
+        samples = Array.new(SAMPLES) do
+          Timeout.timeout(MAX_CASE_SECONDS) do
             Benchmark.realtime do
               benchmark_case.iterations.times { benchmark_case.block.call }
             end
           end
+        end
+        allocated_objects = Timeout.timeout(MAX_CASE_SECONDS) do
           allocations_before = GC.stat(:total_allocated_objects)
           benchmark_case.iterations.times { benchmark_case.block.call }
-          allocations = GC.stat(:total_allocated_objects) - allocations_before
-          [elapsed, allocations]
+          GC.stat(:total_allocated_objects) - allocations_before
         end
         median = samples.sort.fetch(SAMPLES / 2)
         {
@@ -78,7 +79,7 @@ module Purplelight
           allocations_per_operation: allocated_objects.fdiv(benchmark_case.iterations).round(2)
         }
       rescue Timeout::Error
-        raise "#{benchmark_case.name} exceeded #{MAX_CASE_SECONDS}s"
+        raise "#{benchmark_case.name} exceeded #{MAX_CASE_SECONDS}s in a single measurement"
       end
 
       def compare(results, baseline)

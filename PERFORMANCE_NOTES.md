@@ -5,9 +5,9 @@ Updated: 2026-07-21
 ## Completed
 
 - Pinned managed development Ruby 4.0.2; no Homebrew Ruby is used.
-- Updated all compatible dependencies: MongoDB Ruby driver 2.24.1, BSON 5.2.0, zstd-ruby 2.0.6, red-arrow/red-parquet 25.0.0, Rake 13.4.2, RSpec 3.13.2, RuboCop 1.88.2, SimpleCov 1.0.2, StackProf 0.2.28, and current transitives. `diff-lcs` 2.0.0 remains blocked by RSpec's `< 2.0` constraint.
+- Updated all Ruby 3.2-compatible dependencies: MongoDB Ruby driver 2.24.1, BSON 5.2.0, zstd-ruby 2.0.6, red-arrow/red-parquet 25.0.0, Rake 13.4.2, RSpec 3.13.2, RuboCop 1.88.2, SimpleCov 1.0.2, StackProf 0.2.28, and current transitives. `parallel` remains on 1.28 because 2.x requires Ruby 3.3; `diff-lcs` 2.0 remains blocked by RSpec's `< 2.0` constraint.
 - Updated CI to MongoDB 7 and 8, Ruby 3.2 and 4.0, Apache Arrow 25, and `actions/checkout@v7.0.1`.
-- Added 23 bounded microbenchmarks covering all eight runtime paths. The harness enforces 100% path registration, takes the median of five samples, measures allocations, and aborts an entire case after two seconds. The slowest observed timed sample was 0.340 seconds.
+- Added 23 bounded microbenchmarks covering all eight runtime paths. The harness enforces 100% path registration, takes the median of five samples, measures allocations, and aborts each timed sample or allocation pass after two seconds. The slowest observed timed sample was 0.340 seconds.
 - Added CPU and object-allocation StackProf tasks plus generated flamegraph support.
 - Added SimpleCov line and branch enforcement. The full suite verifies 100% line and branch coverage, including CLI and MongoDB integration behavior.
 - Added focused behavioral coverage for queue backpressure, manifests, telemetry, partition planning, compression backends, rotations, Parquet row groups, resumability, concurrent JSONL writing, progress, and telemetry output.

@@ -279,7 +279,7 @@ bundle exec ruby benchmark/microbench.rb --baseline benchmark/baseline.json
 ```
 
 The harness covers every runtime component, takes the median of five samples,
-and aborts any individual benchmark case after two seconds.
+and aborts any timed sample or allocation pass after two seconds.
 
 Optional production-scale load benchmark (not part of the microbenchmark suite):
 

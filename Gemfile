@@ -23,6 +23,7 @@ end
 # Test/dev tools
 group :development, :test do
   gem 'benchmark', '>= 0.5'
+  gem 'parallel', '< 2' # parallel 2.x requires Ruby 3.3; purplelight supports Ruby 3.2
   gem 'rake', '>= 13.0'
   gem 'rspec', '>= 3.12'
   gem 'rubocop', require: false
