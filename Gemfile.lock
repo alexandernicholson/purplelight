@@ -1,7 +1,8 @@
 PATH
   remote: .
   specs:
-    purplelight (0.1.15)
+    purplelight (0.1.16)
+      bigdecimal (>= 3.1)
       logger (~> 1.7, >= 1.7.0)
       mongo (~> 2.24, >= 2.24.1)
 

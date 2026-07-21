@@ -26,6 +26,7 @@ Gem::Specification.new do |spec|
   spec.executables   = ['purplelight']
 
   # Runtime deps
+  spec.add_dependency 'bigdecimal', '>= 3.1'
   spec.add_dependency 'logger', '~> 1.7', '>= 1.7.0'
   spec.add_dependency 'mongo', '~> 2.24', '>= 2.24.1'
   # zstd compression is optional; if the zstd gem is not installed, we fallback to gzip.
