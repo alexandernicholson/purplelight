@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require 'csv'
 require 'json'
 require 'zlib'
 require 'fileutils'
 
+# simplecov:disable
 begin
   require 'zstd-ruby'
 rescue LoadError
@@ -14,14 +14,17 @@ rescue LoadError
     # no zstd backend; gzip fallback used later
   end
 end
+# simplecov:enable
 
 module Purplelight
   # WriterCSV writes documents to CSV files with optional compression.
   class WriterCSV
     DEFAULT_ROTATE_BYTES = 256 * 1024 * 1024
+    DEFAULT_ZSTD_LEVEL = 9
+    DEFAULT_GZIP_LEVEL = 1
 
     def initialize(directory:, prefix:, compression: :zstd, rotate_bytes: DEFAULT_ROTATE_BYTES, logger: nil,
-                   manifest: nil, single_file: false, columns: nil, headers: true)
+                   manifest: nil, single_file: false, columns: nil, headers: true, compression_level: nil)
       @directory = directory
       @prefix = prefix
       @compression = compression
@@ -29,7 +32,7 @@ module Purplelight
       @logger = logger
       @manifest = manifest
       env_level = ENV['PL_ZSTD_LEVEL']&.to_i
-      @compression_level = (env_level&.positive? ? env_level : nil)
+      @compression_level = compression_level || (env_level&.positive? ? env_level : nil)
       @single_file = single_file
 
       @columns = columns&.map(&:to_s)
@@ -37,10 +40,7 @@ module Purplelight
 
       @part_index = nil
       @io = nil
-      @csv = nil
-      @bytes_written = 0
-      @rows_written = 0
-      @file_seq = 0
+      @file_seq = manifest ? manifest.parts.length : 0
       @closed = false
 
       @effective_compression = determine_effective_compression(@compression)
@@ -52,22 +52,24 @@ module Purplelight
     def write_many(array_of_docs)
       ensure_open!
 
-      # infer columns if needed from docs
+      output = +''
+      # Infer columns if needed from docs.
       if @columns.nil?
         sample_docs = array_of_docs.is_a?(Array) ? array_of_docs : []
-        sample_docs = sample_docs.reject { |d| d.is_a?(String) }
+        sample_docs = sample_docs.grep_v(String)
         @columns = infer_columns(sample_docs)
-        @csv << @columns if @headers
+        append_csv_row(output, @columns) if @headers
       end
 
+      rows = 0
       array_of_docs.each do |doc|
         next if doc.is_a?(String)
 
-        row = @columns.map { |k| extract_value(doc, k) }
-        @csv << row
-        @rows_written += 1
+        append_csv_document(output, doc)
+        rows += 1
       end
-      @manifest&.add_progress_to_part!(index: @part_index, rows_delta: array_of_docs.size, bytes_delta: 0)
+      @io.write(output) unless output.empty?
+      @manifest&.add_progress_to_part!(index: @part_index, rows_delta: rows, bytes_delta: 0)
 
       rotate_if_needed
     end
@@ -76,7 +78,7 @@ module Purplelight
       return if @single_file
       return if @rotate_bytes.nil?
 
-      raw_bytes = @io.respond_to?(:pos) ? @io.pos : @bytes_written
+      raw_bytes = @io.respond_to?(:pos) ? @io.pos : @io.bytes_written
       return if raw_bytes < @rotate_bytes
 
       rotate!
@@ -85,7 +87,6 @@ module Purplelight
     def close
       return if @closed
 
-      @csv&.flush
       if @io
         t = Thread.current[:pl_telemetry]&.start(:rotate_time)
         finalize_current_part!
@@ -100,26 +101,20 @@ module Purplelight
     # Minimal wrapper to count bytes written for rotate logic when
     # underlying compressed writer doesn't expose position (e.g., zstd-ruby).
     class CountingIO
-      def initialize(io, on_write:)
+      attr_reader :bytes_written
+
+      def initialize(io)
         @io = io
-        @on_write = on_write
+        @bytes_written = 0
       end
 
       def write(data)
         bytes_written = @io.write(data)
-        @on_write.call(bytes_written) if bytes_written && @on_write
+        @bytes_written += bytes_written
         bytes_written
       end
 
-      # CSV calls '<<' on the underlying IO in some code paths
-      def <<(data)
-        write(data)
-      end
-
-      # CSV#flush may forward flush to underlying IO; make it a no-op if unavailable
-      def flush
-        @io.flush if @io.respond_to?(:flush)
-      end
+      alias << write
 
       def method_missing(method_name, *, &)
         @io.send(method_name, *, &)
@@ -135,31 +130,33 @@ module Purplelight
 
       FileUtils.mkdir_p(@directory)
       path = next_part_path
-      @part_index = @manifest&.open_part!(path) if @manifest
+      @part_index = @manifest.open_part!(path) if @manifest
+      # The compression stream owns and closes this file handle.
+      # rubocop:disable Style/FileOpen
       raw = File.open(path, 'wb')
+      # rubocop:enable Style/FileOpen
       compressed = build_compressed_io(raw)
-      @io = CountingIO.new(compressed, on_write: ->(n) { @bytes_written += n })
-      @csv = CSV.new(@io)
-      @bytes_written = 0
-      @rows_written = 0
+      @io = CountingIO.new(compressed)
+      return unless @headers && @columns
+
+      header = +''
+      append_csv_row(header, @columns)
+      @io.write(header)
     end
 
     def build_compressed_io(raw)
       case @effective_compression.to_s
       when 'zstd'
+        level = @compression_level || DEFAULT_ZSTD_LEVEL
         if Object.const_defined?(:Zstd) && defined?(::Zstd::StreamWriter)
-          level = @compression_level || 10
-          return ::Zstd::StreamWriter.new(raw, level: level)
-        elsif defined?(ZSTDS)
-          level = @compression_level || 10
-          return ZSTDS::Stream::Writer.new(raw, compression_level: level)
+          ::Zstd::StreamWriter.new(raw, level: level)
+        else
+          ZSTDS::Stream::Writer.new(raw, compression_level: level)
         end
 
-        @logger&.warn('zstd gem not loaded; using gzip')
-        Zlib::GzipWriter.new(raw)
-
       when 'gzip'
-        Zlib::GzipWriter.new(raw)
+        level = @compression_level || DEFAULT_GZIP_LEVEL
+        Zlib::GzipWriter.new(raw, level)
       when 'none'
         raw
       else
@@ -175,7 +172,6 @@ module Purplelight
       @io.close
       Thread.current[:pl_telemetry]&.finish(:rotate_time, t)
       @io = nil
-      @csv = nil
       ensure_open!
     end
 
@@ -216,6 +212,39 @@ module Purplelight
       :gzip
     end
 
+    def append_csv_document(output, document)
+      index = 0
+      while index < @columns.length
+        output << ',' unless index.zero?
+        append_csv_value(output, extract_value(document, @columns[index]))
+        index += 1
+      end
+      output << "\n"
+    end
+
+    def append_csv_row(output, values)
+      values.each_with_index do |value, index|
+        output << ',' unless index.zero?
+        append_csv_value(output, value)
+      end
+      output << "\n"
+    end
+
+    def append_csv_value(output, value)
+      return if value.nil?
+
+      string = value.to_s
+      contains_quote = string.include?('"')
+      unless string.empty? || contains_quote || string.include?(',') || string.include?("\n") || string.include?("\r")
+        output << string
+        return
+      end
+
+      output << '"'
+      output << (contains_quote ? string.gsub('"', '""') : string)
+      output << '"'
+    end
+
     def infer_columns(docs)
       keys = {}
       docs.each do |d|
@@ -223,12 +252,14 @@ module Purplelight
       end
       # Put _id first if present, then other keys sorted
       cols = []
-      cols << '_id' if docs.first.key?('_id') || docs.first.key?(:_id)
+      first = docs.first
+      cols << '_id' if first && (first.key?('_id') || first.key?(:_id))
       cols + keys.keys.sort
     end
 
     def extract_value(doc, key)
-      val = doc[key] || doc[key.to_sym]
+      val = doc[key]
+      val = doc[key.to_sym] if val.nil? && !doc.key?(key)
       case val
       when Hash, Array
         JSON.generate(val)

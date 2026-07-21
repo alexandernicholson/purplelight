@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'bson'
 require 'json'
 require 'time'
 require 'securerandom'
@@ -13,7 +14,7 @@ module Purplelight
   # counts so interrupted runs can resume safely and completed runs are
   # reproducible. Methods are thread-safe where mutation occurs.
   class Manifest
-    DEFAULT_VERSION = 1
+    DEFAULT_VERSION = 2
 
     attr_reader :path, :data
 
@@ -24,6 +25,9 @@ module Purplelight
 
     def initialize(path:, data: nil)
       @path = path
+      @directory = File.dirname(path)
+      @temporary_path = "#{path}.tmp"
+      FileUtils.mkdir_p(@directory)
       @data = data || {
         'version' => DEFAULT_VERSION,
         'run_id' => SecureRandom.uuid,
@@ -33,11 +37,12 @@ module Purplelight
         'compression' => nil,
         'query_digest' => nil,
         'options' => {},
+        'partition_filters' => nil,
         'parts' => [],
         'partitions' => []
       }
       @mutex = Mutex.new
-      @last_save_at = Time.now
+      @last_save_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
     def self.load(path)
@@ -46,23 +51,25 @@ module Purplelight
     end
 
     def save!
-      dir = File.dirname(path)
-      FileUtils.mkdir_p(dir)
-      tmp = "#{path}.tmp"
-      File.write(tmp, JSON.pretty_generate(@data))
-      FileUtils.mv(tmp, path)
+      File.write(@temporary_path, JSON.pretty_generate(@data))
+      File.rename(@temporary_path, path)
     end
 
-    def configure!(collection:, format:, compression:, query_digest:, options: {})
-      @data['collection'] = collection
-      @data['format'] = format.to_s
-      @data['compression'] = compression.to_s
-      @data['query_digest'] = query_digest
-      @data['options'] = options
-      save!
+    def configure!(collection:, format:, compression:, query_digest:, options: {}, partition_count: nil)
+      @mutex.synchronize do
+        @data['collection'] = collection
+        @data['format'] = format.to_s
+        @data['compression'] = compression.to_s
+        @data['query_digest'] = query_digest
+        @data['options'] = options
+        normalize_partition_data!(partition_count) if partition_count
+        save!
+      end
     end
 
     def compatible_with?(collection:, format:, compression:, query_digest:)
+      return false unless @data['version'] == DEFAULT_VERSION
+
       @data['collection'] == collection &&
         @data['format'] == format.to_s &&
         @data['compression'] == compression.to_s &&
@@ -72,9 +79,7 @@ module Purplelight
     def ensure_partitions!(count)
       @mutex.synchronize do
         if @data['partitions'].empty?
-          @data['partitions'] = Array.new(count) do |i|
-            { 'index' => i, 'last_id_exclusive' => nil, 'completed' => false }
-          end
+          normalize_partition_data!(count)
           save!
         end
       end
@@ -83,8 +88,8 @@ module Purplelight
     def update_partition_checkpoint!(index, last_id_exclusive)
       @mutex.synchronize do
         part = @data['partitions'][index]
-        part['last_id_exclusive'] = last_id_exclusive
-        save!
+        part['last_id_exclusive'] = serialize_checkpoint(last_id_exclusive)
+        save_maybe!
       end
     end
 
@@ -132,10 +137,51 @@ module Purplelight
       @data['partitions']
     end
 
+    def partition_checkpoint(index)
+      raw_checkpoint = @data['partitions'][index]&.fetch('last_id_exclusive', nil)
+      BSON::ExtJSON.parse_obj(raw_checkpoint) if raw_checkpoint
+    end
+
+    def partition_filters
+      raw_filters = @data['partition_filters']
+      return unless raw_filters
+
+      BSON::ExtJSON.parse_obj(raw_filters).map do |filter_spec|
+        {
+          filter: filter_spec[:filter] || filter_spec['filter'],
+          sort: filter_spec[:sort] || filter_spec['sort'],
+          hint: filter_spec[:hint] || filter_spec['hint']
+        }
+      end
+    end
+
+    def configure_partition_filters!(filters)
+      @mutex.synchronize do
+        @data['partition_filters'] = filters.as_extended_json
+      end
+    end
+
     private
 
+    def serialize_checkpoint(value)
+      case value
+      when nil, String, Numeric, true, false
+        value
+      else
+        value.as_extended_json
+      end
+    end
+
+    def normalize_partition_data!(count)
+      return unless @data['partitions'].empty?
+
+      @data['partitions'] = Array.new(count) do |index|
+        { 'index' => index, 'last_id_exclusive' => nil, 'completed' => false }
+      end
+    end
+
     def save_maybe!(interval_seconds: 2.0)
-      now = Time.now
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       return unless (now - @last_save_at) >= interval_seconds
 
       save!

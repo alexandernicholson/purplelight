@@ -38,6 +38,7 @@ RSpec.describe 'Hint usage' do
 
       client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
       coll = client[:hints]
+      coll.drop
       begin
         coll.drop_indexes
       rescue StandardError

@@ -19,7 +19,7 @@ module Purplelight
       format: :jsonl,
       compression: :zstd,
       batch_size: 2_000,
-      partitions: [Etc.respond_to?(:nprocessors) ? [Etc.nprocessors * 2, 4].max : 4, 32].min,
+      partitions: (Etc.nprocessors * 2).clamp(4, 32),
       queue_size_bytes: 256 * 1024 * 1024,
       rotate_bytes: 256 * 1024 * 1024,
       read_concern: { level: :majority },
@@ -68,6 +68,10 @@ module Purplelight
       @parquet_max_rows = parquet_max_rows
 
       @running = true
+      if @on_progress
+        @progress_mutex = Mutex.new
+        @progress_cv = ConditionVariable.new
+      end
       @telemetry_enabled = telemetry ? telemetry.enabled? : (ENV['PL_TELEMETRY'] == '1')
       @telemetry = telemetry || (
         @telemetry_enabled ? Telemetry.new(enabled: true) : Telemetry::NULL
@@ -105,43 +109,55 @@ module Purplelight
                             read_concern: (@read_concern.is_a?(Hash) ? @read_concern : { level: @read_concern }),
                             no_cursor_timeout: @no_cursor_timeout,
                             writer_threads: @writer_threads,
-                            compression_level: @compression_level || (ENV['PL_ZSTD_LEVEL']&.to_i if @compression.to_s == 'zstd') || ENV['PL_ZSTD_LEVEL']&.to_i,
+                            compression_level: @compression_level || ENV['PL_ZSTD_LEVEL']&.to_i,
                             write_chunk_bytes: @write_chunk_bytes || ENV['PL_WRITE_CHUNK_BYTES']&.to_i,
                             parquet_row_group: @parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i,
                             parquet_max_rows: @parquet_max_rows,
                             sharding: @sharding,
                             resume_overwrite_incompatible: @resume && @resume[:overwrite_incompatible] ? true : false,
                             telemetry: @telemetry_enabled
-                          })
-      manifest.ensure_partitions!(@partitions)
+                          }, partition_count: @partitions)
 
-      # Plan partitions
+      # Reuse the original ranges on resume. Replanning against a growing collection
+      # can move partition boundaries and replay rows under the old checkpoints.
       t_plan = @telemetry.start(:partition_plan_time)
-      partition_filters = Partitioner.object_id_partitions(collection: @collection, query: @query,
-                                                           partitions: @partitions, telemetry: @telemetry)
+      partition_filters = manifest.partition_filters
+      unless partition_filters
+        partition_filters = Partitioner.object_id_partitions(collection: @collection, query: @query,
+                                                             partitions: @partitions, telemetry: @telemetry)
+        manifest.configure_partition_filters!(partition_filters)
+      end
       @telemetry.finish(:partition_plan_time, t_plan)
 
       # Reader queue
       queue = ByteQueue.new(max_bytes: @queue_size_bytes)
 
       # Writer
-      writer = case @format
-               when :jsonl
-                 WriterJSONL.new(directory: dir, prefix: prefix, compression: @compression,
-                                 rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest)
-               when :csv
-                 single_file = @sharding && @sharding[:mode].to_s == 'single_file'
-                 WriterCSV.new(directory: dir, prefix: prefix, compression: @compression, rotate_bytes: @rotate_bytes,
-                               logger: @logger, manifest: manifest, single_file: single_file)
-               when :parquet
-                 single_file = @sharding && @sharding[:mode].to_s == 'single_file'
-                 row_group = @parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i || WriterParquet::DEFAULT_ROW_GROUP_SIZE
-                 WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger,
-                                   manifest: manifest, single_file: single_file, row_group_size: row_group,
-                                   rotate_rows: @parquet_max_rows)
-               else
-                 raise ArgumentError, "format not implemented: #{@format}"
-               end
+      writer_count = @format == :jsonl ? [@writer_threads.to_i, 1].max : 1
+      part_sequence = WriterJSONL::PartSequence.new(manifest.parts.length) if @format == :jsonl
+      writers = case @format
+                when :jsonl
+                  Array.new(writer_count) do
+                    WriterJSONL.new(directory: dir, prefix: prefix, compression: @compression,
+                                    rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest,
+                                    compression_level: @compression_level, write_chunk_bytes: @write_chunk_bytes,
+                                    part_sequence:)
+                  end
+                when :csv
+                  single_file = @sharding && @sharding[:mode].to_s == 'single_file'
+                  [WriterCSV.new(directory: dir, prefix: prefix, compression: @compression,
+                                 rotate_bytes: @rotate_bytes, logger: @logger, manifest: manifest,
+                                 single_file:, compression_level: @compression_level)]
+                when :parquet
+                  single_file = @sharding && @sharding[:mode].to_s == 'single_file'
+                  row_group = @parquet_row_group || ENV['PL_PARQUET_ROW_GROUP']&.to_i ||
+                              WriterParquet::DEFAULT_ROW_GROUP_SIZE
+                  [WriterParquet.new(directory: dir, prefix: prefix, compression: @compression, logger: @logger,
+                                     manifest:, single_file:, row_group_size: row_group,
+                                     rotate_rows: @parquet_max_rows)]
+                else
+                  raise ArgumentError, "format not implemented: #{@format}"
+                end
 
       # Start reader threads
       readers = partition_filters.each_with_index.map do |pf, idx|
@@ -153,37 +169,49 @@ module Purplelight
         end
       end
 
-      # Writer loop
-      writer_telemetry = @telemetry_enabled ? Telemetry.new(enabled: true) : Telemetry::NULL
-      writer_thread = Thread.new do
-        Thread.current[:pl_telemetry] = writer_telemetry if @telemetry_enabled
-        loop do
-          batch = queue.pop
-          break if batch.nil?
+      # Writer loops
+      writer_telemetries = []
+      writer_threads = writers.map do |writer|
+        writer_telemetry = @telemetry_enabled ? Telemetry.new(enabled: true) : Telemetry::NULL
+        writer_telemetries << writer_telemetry
+        Thread.new(writer, writer_telemetry) do |worker_writer, worker_telemetry|
+          Thread.current[:pl_telemetry] = worker_telemetry if @telemetry_enabled
+          loop do
+            batch = queue.pop
+            break if batch.nil?
 
-          writer.write_many(batch)
-        end
-      ensure
-        writer.close
-      end
-
-      progress_thread = Thread.new do
-        Time.now
-        loop do
-          sleep 2
-          break unless @running
-
-          @on_progress&.call({ queue_bytes: queue.size_bytes })
+            worker_writer.write_many(batch)
+          end
+        ensure
+          worker_writer.close
         end
       end
+
+      progress_thread = if @on_progress
+                          Thread.new do
+                            loop do
+                              @progress_mutex.synchronize { @progress_cv.wait(@progress_mutex, 2) }
+                              break unless @running
+
+                              @on_progress.call({ queue_bytes: queue.size_bytes })
+                            end
+                          end
+                        end
 
       # Join readers
       readers.each(&:join)
       queue.close
-      writer_thread.join
-      @telemetry.merge!(writer_telemetry) if @telemetry_enabled
-      @running = false
-      progress_thread.join
+      writer_threads.each(&:join)
+      writer_telemetries.each { |writer_telemetry| @telemetry.merge!(writer_telemetry) } if @telemetry_enabled
+      if progress_thread
+        @progress_mutex.synchronize do
+          @running = false
+          @progress_cv.broadcast
+        end
+        progress_thread.join
+      else
+        @running = false
+      end
       if @telemetry_enabled
         total = @telemetry.timers.values.sum
         breakdown = @telemetry.timers
@@ -222,7 +250,7 @@ module Purplelight
       hint = @hint || filter_spec[:hint] || { _id: 1 }
 
       # Resume from checkpoint if present
-      checkpoint = manifest.partitions[idx] && manifest.partitions[idx]['last_id_exclusive']
+      checkpoint = manifest.partition_checkpoint(idx)
       if checkpoint
         filter = filter.dup
         filter['_id'] = (filter['_id'] || {}).merge({ '$gt' => checkpoint })
@@ -248,11 +276,12 @@ module Purplelight
       string_batch = +''
       buffer = []
       buffer_bytes = 0
+      buffer_rows = 0
       json_state = if encode_lines
                      JSON::Ext::Generator::State.new(ascii_only: false, max_nesting: false,
                                                      buffer_initial_length: 4_096)
                    end
-      size_state = encode_lines ? nil : JSON::Ext::Generator::State.new(ascii_only: false, max_nesting: false)
+      bson_size_buffer = BSON::ByteBuffer.new unless encode_lines
       last_id = checkpoint
       begin
         cursor.each do |doc|
@@ -266,37 +295,43 @@ module Purplelight
             string_batch << "\n"
             bytes = json.bytesize + 1
           else
-            # For CSV/Parquet keep raw docs to allow schema/row building
-            json = size_state.generate(doc)
-            bytes = json.bytesize + 1
+            previous_length = bson_size_buffer.length
+            doc.to_bson(bson_size_buffer)
+            bytes = bson_size_buffer.length - previous_length
             telemetry.finish(:serialize_time, t_ser)
             buffer << doc
           end
           buffer_bytes += bytes
-          # For JSONL, we count rows via newline accumulation; for others, use array length
-          ready = encode_lines ? (buffer_bytes >= 1_000_000 || (string_batch.length >= 1_000_000)) : (buffer.length >= batch_size || buffer_bytes >= 1_000_000)
+          buffer_rows += 1
+          # Flush on the configured row count or before a batch exceeds 1 MB.
+          ready = buffer_rows >= batch_size || buffer_bytes >= 1_000_000
           next unless ready
 
           t_q = telemetry.start(:queue_wait_time)
           if encode_lines
-            queue.push(string_batch, bytes: buffer_bytes)
+            batch = WriterJSONL::EncodedBatch.new(data: string_batch, rows: buffer_rows, bytes: buffer_bytes)
+            queue.push(batch, bytes: buffer_bytes)
             string_batch = +''
           else
             queue.push(buffer, bytes: buffer_bytes)
             buffer = []
+            bson_size_buffer = BSON::ByteBuffer.new
           end
           telemetry.finish(:queue_wait_time, t_q)
           manifest.update_partition_checkpoint!(idx, last_id)
           buffer_bytes = 0
+          buffer_rows = 0
         end
         if encode_lines
           unless string_batch.empty?
             t_q = telemetry.start(:queue_wait_time)
-            queue.push(string_batch, bytes: buffer_bytes)
+            batch = WriterJSONL::EncodedBatch.new(data: string_batch, rows: buffer_rows, bytes: buffer_bytes)
+            queue.push(batch, bytes: buffer_bytes)
             telemetry.finish(:queue_wait_time, t_q)
             manifest.update_partition_checkpoint!(idx, last_id)
             string_batch = +''
             buffer_bytes = 0
+            buffer_rows = 0
           end
         elsif !buffer.empty?
           t_q = telemetry.start(:queue_wait_time)
@@ -305,6 +340,7 @@ module Purplelight
           manifest.update_partition_checkpoint!(idx, last_id)
           buffer = []
           buffer_bytes = 0
+          buffer_rows = 0
         end
         manifest.mark_partition_complete!(idx)
       end

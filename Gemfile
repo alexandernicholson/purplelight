@@ -9,20 +9,23 @@ gemspec
 group :compression do
   # Uncomment one of the following for zstd compression support
   # gem "ruby-zstds", "~> 1.3.1" # Provides ZSTDS namespace
-  gem 'zstd-ruby', '~> 1.5'
+  gem 'zstd-ruby', '~> 2.0'
 end
 
 group :parquet do
   # Optional: Apache Arrow + Parquet support
-  gem 'red-arrow', '>= 21.0'
-  gem 'red-parquet', '>= 21.0'
+  gem 'red-arrow', '>= 25.0'
+  gem 'red-parquet', '>= 25.0'
 end
 
 # Linting (development)
 
 # Test/dev tools
 group :development, :test do
+  gem 'benchmark', '>= 0.5'
   gem 'rake', '>= 13.0'
   gem 'rspec', '>= 3.12'
   gem 'rubocop', require: false
+  gem 'simplecov', '>= 0.22', require: false
+  gem 'stackprof', '~> 0.2.28', require: false
 end

@@ -6,6 +6,7 @@ module Purplelight
     def initialize(max_bytes: 128 * 1024 * 1024)
       @max_bytes = max_bytes
       @queue = []
+      @sizes = []
       @bytes = 0
       @closed = false
       @mutex = Mutex.new
@@ -16,8 +17,12 @@ module Purplelight
       @mutex.synchronize do
         raise 'queue closed' if @closed
 
-        @cv.wait(@mutex) while (@bytes + bytes) > @max_bytes
-        @queue << [item, bytes]
+        while !@queue.empty? && (@bytes + bytes) > @max_bytes
+          @cv.wait(@mutex)
+          raise 'queue closed' if @closed
+        end
+        @queue << item
+        @sizes << bytes
         @bytes += bytes
         @cv.broadcast
       end
@@ -30,7 +35,8 @@ module Purplelight
 
           @cv.wait(@mutex)
         end
-        item, bytes = @queue.shift
+        item = @queue.shift
+        bytes = @sizes.shift
         @bytes -= bytes
         @cv.broadcast
         item

@@ -1,5 +1,17 @@
 # frozen_string_literal: true
 
+require 'simplecov'
+
+SimpleCov.start do
+  enable_coverage :branch
+  primary_coverage :line
+  skip '/spec/'
+  skip '/benchmark/'
+  group 'Library', 'lib'
+  group 'CLI', 'bin'
+  minimum_coverage line: 100, branch: 100
+end
+
 require 'bundler/setup'
 require 'purplelight'
 require 'logger'

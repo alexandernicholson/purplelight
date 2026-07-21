@@ -41,6 +41,7 @@ RSpec.describe 'Query filtering' do
 
         client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:qtest]
+        coll.drop
         coll.insert_many([
                            { _id: BSON::ObjectId.new, status: 'active', n: 1 },
                            { _id: BSON::ObjectId.new, status: 'inactive', n: 2 },

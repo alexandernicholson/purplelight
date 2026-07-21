@@ -1,10 +1,6 @@
 # Project-specific RuboCop configuration
 # Pragmatic: ignore "too long" cops per maintainer preference.
 
-AllCops:
-  NewCops: enable
-  TargetRubyVersion: 3.2
-
 Metrics/BlockLength:
   Enabled: false
 Metrics/ClassLength:

@@ -50,6 +50,7 @@ RSpec.describe 'Parquet small collections (requires Arrow/Parquet)' do
 
         client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:tiny_pq]
+        coll.drop
         docs = [
           { _id: BSON::ObjectId.new, email: 'a@ex.com', active: true, n: 1 },
           { _id: BSON::ObjectId.new, email: 'b@ex.com', active: false, n: 2 },
@@ -94,6 +95,7 @@ RSpec.describe 'Parquet small collections (requires Arrow/Parquet)' do
 
         client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:tiny_pq_parts]
+        coll.drop
         docs = [
           { _id: BSON::ObjectId.new, email: 'x@ex.com', active: true, n: 10 },
           { _id: BSON::ObjectId.new, email: 'y@ex.com', active: true, n: 20 }
@@ -138,6 +140,7 @@ RSpec.describe 'Parquet small collections (requires Arrow/Parquet)' do
 
         client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:tiny_pq_rotate]
+        coll.drop
         # Insert 10 small docs
         docs = 10.times.map { |i| { _id: BSON::ObjectId.new, email: "r#{i}@ex.com", active: true, n: i } }
         coll.insert_many(docs)

@@ -351,7 +351,7 @@ RSpec.describe 'CLI tunables via flags' do
     end
   end
 
-  it 'records --writer-threads in manifest (experimental)' do
+  it 'records --writer-threads in the manifest' do
     Dir.mktmpdir('purplelight-cli-writers') do |dir|
       container = nil
       mongo_url = ENV['MONGO_URL'] || 'mongodb://127.0.0.1:27017'

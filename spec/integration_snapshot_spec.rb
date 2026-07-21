@@ -50,6 +50,7 @@ RSpec.describe 'End-to-end snapshot (JSONL, local Mongo or skip)' do
 
         client = Mongo::Client.new(mongo_url, server_api: { version: '1' })
         coll = client[:users]
+        coll.drop
         docs = 1_000.times.map { |i| { _id: BSON::ObjectId.new, email: "user#{i}@ex.com", active: i.even? } }
         coll.insert_many(docs)
         active_docs = docs.select { |d| d[:active] }

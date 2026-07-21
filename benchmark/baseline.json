@@ -1,0 +1,352 @@
+{
+  "generated_at": "2026-07-21T09:55:57Z",
+  "coverage": {
+    "covered": [
+      "manifest",
+      "partitioner",
+      "queue",
+      "snapshot",
+      "telemetry",
+      "writer_csv",
+      "writer_jsonl",
+      "writer_parquet"
+    ],
+    "required": [
+      "manifest",
+      "partitioner",
+      "queue",
+      "snapshot",
+      "telemetry",
+      "writer_csv",
+      "writer_jsonl",
+      "writer_parquet"
+    ],
+    "percent": 100.0
+  },
+  "max_case_seconds": 2.0,
+  "samples": 5,
+  "results": {
+    "byte_queue_round_trip": {
+      "iterations": 20000,
+      "seconds": 0.053941,
+      "sample_seconds": [
+        0.007595,
+        0.018067,
+        0.007425,
+        0.013365,
+        0.007489
+      ],
+      "operations_per_second": 2633311.36,
+      "allocated_objects": 100001,
+      "allocations_per_operation": 5.0
+    },
+    "byte_queue_bulk_drain": {
+      "iterations": 10,
+      "seconds": 0.058171,
+      "sample_seconds": [
+        0.011596,
+        0.011667,
+        0.01175,
+        0.011877,
+        0.011281
+      ],
+      "operations_per_second": 857.12,
+      "allocated_objects": 70,
+      "allocations_per_operation": 7.0
+    },
+    "telemetry_counter_and_timer": {
+      "iterations": 50000,
+      "seconds": 0.04747,
+      "sample_seconds": [
+        0.009476,
+        0.009558,
+        0.009509,
+        0.009478,
+        0.009449
+      ],
+      "operations_per_second": 5275374.56,
+      "allocated_objects": 0,
+      "allocations_per_operation": 0.0
+    },
+    "telemetry_construction": {
+      "iterations": 100000,
+      "seconds": 0.107426,
+      "sample_seconds": [
+        0.02273,
+        0.021634,
+        0.020193,
+        0.021322,
+        0.021547
+      ],
+      "operations_per_second": 4641017.33,
+      "allocated_objects": 300000,
+      "allocations_per_operation": 3.0
+    },
+    "manifest_progress": {
+      "iterations": 250,
+      "seconds": 0.714513,
+      "sample_seconds": [
+        0.144839,
+        0.145152,
+        0.143372,
+        0.140609,
+        0.140541
+      ],
+      "operations_per_second": 1743.72,
+      "allocated_objects": 21250,
+      "allocations_per_operation": 85.0
+    },
+    "partition_range_planning": {
+      "iterations": 100000,
+      "seconds": 0.045859,
+      "sample_seconds": [
+        0.009671,
+        0.009649,
+        0.009258,
+        0.008996,
+        0.008285
+      ],
+      "operations_per_second": 10801468.79,
+      "allocated_objects": 100000,
+      "allocations_per_operation": 1.0
+    },
+    "partition_cursor_sampling": {
+      "iterations": 10,
+      "seconds": 0.006557,
+      "sample_seconds": [
+        0.001337,
+        0.001296,
+        0.001314,
+        0.001294,
+        0.001316
+      ],
+      "operations_per_second": 7610.35,
+      "allocated_objects": 250,
+      "allocations_per_operation": 25.0
+    },
+    "snapshot_configuration": {
+      "iterations": 10000,
+      "seconds": 0.211803,
+      "sample_seconds": [
+        0.043064,
+        0.041384,
+        0.042928,
+        0.042796,
+        0.041631
+      ],
+      "operations_per_second": 233666.7,
+      "allocated_objects": 170000,
+      "allocations_per_operation": 17.0
+    },
+    "snapshot_empty_export": {
+      "iterations": 20,
+      "seconds": 0.046427,
+      "sample_seconds": [
+        0.008102,
+        0.007108,
+        0.008957,
+        0.014756,
+        0.007504
+      ],
+      "operations_per_second": 2468.53,
+      "allocated_objects": 3420,
+      "allocations_per_operation": 171.0
+    },
+    "snapshot_raw_batching": {
+      "iterations": 100,
+      "seconds": 0.059924,
+      "sample_seconds": [
+        0.011836,
+        0.012093,
+        0.012064,
+        0.011962,
+        0.011969
+      ],
+      "operations_per_second": 8354.92,
+      "allocated_objects": 1800,
+      "allocations_per_operation": 18.0
+    },
+    "snapshot_jsonl_serial_pipeline": {
+      "iterations": 3,
+      "seconds": 1.593689,
+      "sample_seconds": [
+        0.332539,
+        0.320695,
+        0.319876,
+        0.30983,
+        0.310749
+      ],
+      "operations_per_second": 9.38,
+      "allocated_objects": 543645,
+      "allocations_per_operation": 181215.0
+    },
+    "snapshot_jsonl_pipeline": {
+      "iterations": 3,
+      "seconds": 0.978552,
+      "sample_seconds": [
+        0.195724,
+        0.195973,
+        0.19579,
+        0.195125,
+        0.19594
+      ],
+      "operations_per_second": 15.32,
+      "allocated_objects": 543867,
+      "allocations_per_operation": 181289.0
+    },
+    "jsonl_batch_write": {
+      "iterations": 100,
+      "seconds": 0.11875,
+      "sample_seconds": [
+        0.022894,
+        0.025733,
+        0.021527,
+        0.024267,
+        0.024329
+      ],
+      "operations_per_second": 4120.82,
+      "allocated_objects": 182800,
+      "allocations_per_operation": 1828.0
+    },
+    "jsonl_zstd_batch_write": {
+      "iterations": 50,
+      "seconds": 0.071127,
+      "sample_seconds": [
+        0.016098,
+        0.012678,
+        0.013116,
+        0.013103,
+        0.016132
+      ],
+      "operations_per_second": 3812.14,
+      "allocated_objects": 92050,
+      "allocations_per_operation": 1841.0
+    },
+    "jsonl_preencoded_accounting": {
+      "iterations": 10000,
+      "seconds": 0.155715,
+      "sample_seconds": [
+        0.031233,
+        0.03071,
+        0.031271,
+        0.031395,
+        0.031106
+      ],
+      "operations_per_second": 320174.17,
+      "allocated_objects": 0,
+      "allocations_per_operation": 0.0
+    },
+    "csv_batch_write": {
+      "iterations": 100,
+      "seconds": 0.29281,
+      "sample_seconds": [
+        0.057804,
+        0.058016,
+        0.058681,
+        0.059051,
+        0.059258
+      ],
+      "operations_per_second": 1704.13,
+      "allocated_objects": 363700,
+      "allocations_per_operation": 3637.0
+    },
+    "csv_zstd_batch_write": {
+      "iterations": 50,
+      "seconds": 0.222587,
+      "sample_seconds": [
+        0.05143,
+        0.046745,
+        0.038643,
+        0.052235,
+        0.033534
+      ],
+      "operations_per_second": 1069.63,
+      "allocated_objects": 182500,
+      "allocations_per_operation": 3650.0
+    },
+    "csv_gzip_batch_write": {
+      "iterations": 50,
+      "seconds": 0.148172,
+      "sample_seconds": [
+        0.027482,
+        0.034167,
+        0.027431,
+        0.031337,
+        0.027755
+      ],
+      "operations_per_second": 1801.48,
+      "allocated_objects": 182550,
+      "allocations_per_operation": 3651.0
+    },
+    "csv_counting_io_write": {
+      "iterations": 100000,
+      "seconds": 0.041051,
+      "sample_seconds": [
+        0.008018,
+        0.008041,
+        0.008821,
+        0.008223,
+        0.007948
+      ],
+      "operations_per_second": 12436264.16,
+      "allocated_objects": 0,
+      "allocations_per_operation": 0.0
+    },
+    "csv_row_serialization": {
+      "iterations": 25000,
+      "seconds": 0.291323,
+      "sample_seconds": [
+        0.061351,
+        0.057502,
+        0.057275,
+        0.057677,
+        0.057518
+      ],
+      "operations_per_second": 434646.55,
+      "allocated_objects": 375000,
+      "allocations_per_operation": 15.0
+    },
+    "parquet_buffer_append": {
+      "iterations": 5000,
+      "seconds": 0.005627,
+      "sample_seconds": [
+        0.001129,
+        0.001121,
+        0.001122,
+        0.001125,
+        0.00113
+      ],
+      "operations_per_second": 4444444.64,
+      "allocated_objects": 0,
+      "allocations_per_operation": 0.0
+    },
+    "parquet_bson_value": {
+      "iterations": 100000,
+      "seconds": 0.129332,
+      "sample_seconds": [
+        0.025741,
+        0.025057,
+        0.025474,
+        0.025726,
+        0.027334
+      ],
+      "operations_per_second": 3887118.11,
+      "allocated_objects": 300000,
+      "allocations_per_operation": 3.0
+    },
+    "parquet_batch_write": {
+      "iterations": 10,
+      "seconds": 0.173965,
+      "sample_seconds": [
+        0.032669,
+        0.031378,
+        0.034728,
+        0.044198,
+        0.030992
+      ],
+      "operations_per_second": 306.1,
+      "allocated_objects": 122810,
+      "allocations_per_operation": 12281.0
+    }
+  }
+}

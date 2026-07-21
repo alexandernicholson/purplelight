@@ -241,8 +241,14 @@ RSpec.describe 'CLI additional end-to-end' do
 
         client = Mongo::Client.new(mongo_url, server_api: { version: '1' }).use(db_name)
         coll = client[coll_name.to_sym]
+        coll.drop
 
-        first = 50.times.map { |i| { _id: BSON::ObjectId.new, email: "a#{i}@ex.com", active: true } }
+        object_id = lambda do |timestamp, counter|
+          BSON::ObjectId.from_string(format('%<timestamp>08x0000000000%<counter>06x', timestamp:, counter:))
+        end
+        first = 50.times.map do |index|
+          { _id: object_id.call(1_700_000_000, index), email: "a#{index}@ex.com", active: true }
+        end
         coll.insert_many(first)
 
         cmd1 = [
@@ -263,7 +269,9 @@ RSpec.describe 'CLI additional end-to-end' do
         data1 = JSON.parse(File.read(manifest_path))
         rows1 = data1.fetch('parts', []).sum { |p| p['rows'].to_i }
 
-        more = 30.times.map { |i| { _id: BSON::ObjectId.new, email: "b#{i}@ex.com", active: true } }
+        more = 30.times.map do |index|
+          { _id: object_id.call(1_700_000_001, index), email: "b#{index}@ex.com", active: true }
+        end
         coll.insert_many(more)
 
         cmd2 = cmd1
@@ -274,14 +282,16 @@ RSpec.describe 'CLI additional end-to-end' do
         expect(rows2).to be >= rows1
 
         files = Dir[File.join(dir, "#{prefix}-part-*.jsonl*")]
+        file_counts = {}
         ids = []
         files.sort.each do |f|
-          read_text_lines(f).each do |line|
-            doc = JSON.parse(line)
-            ids << doc['_id']
+          file_ids = read_text_lines(f).map do |line|
+            JSON.parse(line)['_id']
           end
+          file_counts[File.basename(f)] = [file_ids.length, file_ids.uniq.length]
+          ids.concat(file_ids)
         end
-        expect(ids.uniq.size).to eq(ids.size)
+        expect(ids.uniq.size).to eq(ids.size), "duplicate IDs by file: #{file_counts.inspect}"
       ensure
         system("docker rm -f #{container} > /dev/null 2>&1") if container
       end
@@ -462,40 +472,51 @@ RSpec.describe 'CLI additional behaviors' do
         # Insert enough docs to keep readers busy
         coll.insert_many(20_000.times.map { |i| { _id: BSON::ObjectId.new, i: i } })
 
-        # Baseline connection count
-        base_conn = client.database.command(serverStatus: 1).first.dig('connections', 'current').to_i
-        peak_conn = base_conn
-        done = false
+        observer_class = Class.new do
+          def initialize
+            @active = {}
+            @peak = 0
+            @mutex = Mutex.new
+          end
 
-        # Run Purplelight with multiple partitions (drives concurrent readers)
-        snap_thread = Thread.new do
-          Purplelight.snapshot(
-            client: client,
-            collection: :pool_probe,
-            output: dir,
-            format: :jsonl,
-            partitions: 8,
-            batch_size: 2000,
-            sharding: { mode: :by_size, part_bytes: 32 * 1024 * 1024, prefix: 'pool_probe' },
-            resume: { enabled: true }
-          )
-        ensure
-          done = true
+          def published(event)
+            case event
+            when Mongo::Monitoring::Event::Cmap::ConnectionCheckedOut
+              key = [event.pool.object_id, event.connection_id]
+              @mutex.synchronize do
+                @active[key] = true
+                @peak = [@peak, @active.length].max
+              end
+              sleep 0.01
+            when Mongo::Monitoring::Event::Cmap::ConnectionCheckedIn
+              key = [event.pool.object_id, event.connection_id]
+              @mutex.synchronize { @active.delete(key) }
+            end
+          end
+
+          def peak
+            @mutex.synchronize { @peak }
+          end
         end
+        observer = observer_class.new
+        client.subscribe(Mongo::Monitoring::CONNECTION_POOL, observer)
 
-        # Sample serverStatus during snapshot to observe connection usage rising above baseline
-        deadline = Time.now + 60
-        until done || Time.now > deadline
-          cur = client.database.command(serverStatus: 1).first.dig('connections', 'current').to_i
-          peak_conn = [peak_conn, cur].max
-          sleep 0.1
-        end
-        snap_thread.join
+        Purplelight.snapshot(
+          client: client,
+          collection: :pool_probe,
+          output: dir,
+          format: :jsonl,
+          partitions: 8,
+          batch_size: 2000,
+          sharding: { mode: :by_size, part_bytes: 32 * 1024 * 1024, prefix: 'pool_probe' },
+          resume: { enabled: true }
+        )
 
-        expect(peak_conn).to be > base_conn
+        expect(observer.peak).to be > 1
         parts = Dir[File.join(dir, 'pool_probe-part-*.jsonl*')]
         expect(parts).not_to be_empty
       ensure
+        client&.close
         system("docker rm -f #{container} > /dev/null 2>&1") if container
       end
     end

@@ -12,3 +12,14 @@ rescue LoadError
     sh 'echo "RSpec not installed"'
   end
 end
+
+desc 'Run the bounded microbenchmark suite'
+task :microbench do
+  ruby 'benchmark/microbench.rb'
+end
+
+desc 'Profile all microbenchmarks and render CPU/allocation flamegraphs'
+task :profile do
+  ruby 'benchmark/profile.rb --mode cpu'
+  ruby 'benchmark/profile.rb --mode object'
+end

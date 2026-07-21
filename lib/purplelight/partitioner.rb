@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'mongo'
+require_relative 'telemetry'
 
 module Purplelight
   # Partitioner builds MongoDB range filters to split work across workers.
@@ -14,7 +15,7 @@ module Purplelight
     def self.object_id_partitions(collection:, query:, partitions:, mode: nil, telemetry: nil)
       # Choose planning mode: :timestamp (fast), :cursor (legacy)
       chosen_mode = (mode || ENV['PL_PARTITIONER_MODE'] || :timestamp).to_sym
-      telemetry ||= (defined?(Telemetry) ? Telemetry::NULL : nil)
+      telemetry ||= Telemetry::NULL
 
       return cursor_sampling_partitions(collection: collection, query: query, partitions: partitions) if chosen_mode == :cursor
 
@@ -112,11 +113,16 @@ module Purplelight
       step = [total / partitions, 1].max
       boundaries = []
       cursor = base_query.projection(_id: 1).batch_size(1_000).no_cursor_timeout
-      i = 0
+      index = 0
+      next_boundary = 0
       cursor.each do |doc|
-        boundaries << doc['_id'] if (i % step).zero?
-        i += 1
-        break if boundaries.size >= partitions
+        if index == next_boundary
+          boundaries << doc['_id']
+          break if boundaries.size >= partitions
+
+          next_boundary += step
+        end
+        index += 1
       end
 
       ranges = []

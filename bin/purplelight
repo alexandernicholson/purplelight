@@ -59,7 +59,7 @@ parser = OptionParser.new do |opts|
     options[:sharding] ||= {}
     options[:sharding][:prefix] = v
   end
-  opts.on('--writer-threads N', Integer, 'Number of writer threads (experimental, JSONL only)') { |v| options[:writer_threads] = v }
+  opts.on('--writer-threads N', Integer, 'Number of concurrent JSONL writer threads') { |v| options[:writer_threads] = v }
   opts.on('--write-chunk-mb MB', Integer, 'JSONL encode/write chunk size in MB') { |v| options[:write_chunk_bytes] = v * 1024 * 1024 }
   opts.on('--parquet-row-group N', Integer, 'Parquet row group size (rows)') { |v| options[:parquet_row_group] = v }
   opts.on('--parquet-max-rows N', Integer, 'Parquet max rows per part (multi-part only)') { |v| options[:parquet_max_rows] = v }
@@ -160,8 +160,8 @@ snapshot_args[:no_cursor_timeout] = options[:no_cursor_timeout] unless options[:
 snapshot_args[:compression_level] = options[:compression_level] if options[:compression_level]
 snapshot_args[:writer_threads] = options[:writer_threads] if options[:writer_threads]
 snapshot_args[:write_chunk_bytes] = options[:write_chunk_bytes] if options[:write_chunk_bytes]
- snapshot_args[:parquet_row_group] = options[:parquet_row_group] if options[:parquet_row_group]
- snapshot_args[:parquet_max_rows] = options[:parquet_max_rows] if options[:parquet_max_rows]
+snapshot_args[:parquet_row_group] = options[:parquet_row_group] if options[:parquet_row_group]
+snapshot_args[:parquet_max_rows] = options[:parquet_max_rows] if options[:parquet_max_rows]
 
 # telemetry env override
 if options[:telemetry_flag]
@@ -172,7 +172,7 @@ end
 ENV['PL_ZSTD_LEVEL'] = options[:compression_level].to_s if options[:compression_level]
 ENV['PL_WRITE_CHUNK_BYTES'] = options[:write_chunk_bytes].to_s if options[:write_chunk_bytes]
 ENV['PL_PARQUET_ROW_GROUP'] = options[:parquet_row_group].to_s if options[:parquet_row_group]
-  # No env default for parquet_max_rows; it is snapshot-argument only
+# No env default for parquet_max_rows; it is snapshot-argument only
 ENV['PL_WRITER_THREADS'] = options[:writer_threads].to_s if options[:writer_threads]
 
 ok = Purplelight.snapshot(**snapshot_args)

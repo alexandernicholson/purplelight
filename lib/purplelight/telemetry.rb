@@ -7,7 +7,6 @@ module Purplelight
       @enabled = enabled
       @counters = Hash.new(0)
       @timers = Hash.new(0.0)
-      @mutex = Mutex.new
     end
 
     def enabled?

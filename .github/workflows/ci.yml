@@ -9,16 +9,21 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mongodb: ['7', '8']
+        ruby: ['3.2', '4.0']
     services:
-      mongo7:
-        image: mongo:7
+      mongo:
+        image: mongo:${{ matrix.mongodb }}
         ports:
           - 27017:27017
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand({hello:1})'" --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Install Apache Arrow (Ubuntu)
         run: |
@@ -29,17 +34,14 @@ jobs:
           wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-$DIST.deb -O apache-arrow-apt-source.deb
           sudo apt install -y ./apache-arrow-apt-source.deb
           sudo apt-get update -y
-          sudo apt-get install -y -V libarrow-dev=21.* libarrow-glib-dev=21.* libparquet-dev=21.* libparquet-glib-dev=21.*
+          sudo apt-get install -y -V libarrow-dev=25.* libarrow-glib-dev=25.* libparquet-dev=25.* libparquet-glib-dev=25.*
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
+          ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
 
-      - name: Install system deps (optional)
-        run: |
-          echo "No extra system deps for default test run"
 
       - name: Run specs (Linux, with Mongo service)
         env:
@@ -47,15 +49,5 @@ jobs:
         run: |
           bundle exec rspec --format progress
 
-      - name: Run benchmark (JSONL)
-        env:
-          BENCH: '1'
-        run: |
-          bundle exec rspec spec/benchmark_perf_spec.rb --format doc
-
-      - name: Run benchmark (Parquet)
-        env:
-          BENCH: '1'
-          BENCH_FORMAT: parquet
-        run: |
-          bundle exec rspec spec/benchmark_perf_spec.rb --format doc
+      - name: Run sub-two-second microbenchmarks
+        run: bundle exec ruby benchmark/microbench.rb

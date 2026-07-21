@@ -214,7 +214,7 @@ bundle exec bin/purplelight \
 - `--parquet-row-group N`: Parquet row group size (rows).
 - `--parquet-max-rows N`: Parquet max rows per part (enables multi-part when not `--single-file`).
 - `--write-chunk-mb MB`: JSONL encode/write chunk size before enqueueing.
-- `--writer-threads N` (experimental): Number of writer threads (JSONL only).
+- `--writer-threads N`: Number of concurrent JSONL writer threads.
 - `--telemetry on|off`: Force enable/disable telemetry output.
 - `--resume-overwrite-incompatible`: Overwrite an existing incompatible manifest to safely resume anew.
 - `--dry-run`: Print effective read preference JSON and exit (no snapshot).
@@ -261,6 +261,7 @@ Key points:
 - **Compression**: prefer `zstd`; adjust level to balance speed/ratio. CLI: `--compression zstd --compression-level N`. For max speed, try `--compression gzip --compression-level 1`.
 - **Rotation size**: larger (512MB–1GB) reduces finalize overhead for many parts. CLI: `--rotate-mb` (and/or `--by-size`).
 - **JSONL chunking**: tune builder write chunk size for throughput. CLI: `--write-chunk-mb`.
+- **JSONL writer threads**: use `--writer-threads 2` when serialization or compression is the bottleneck. Writers emit independently numbered parts; downstream consumers must not assume document order across parts.
 - **Parquet row groups**: choose a row group size that fits downstream readers. CLI: `--parquet-row-group`.
 - **Parquet parts (rows)**: split Parquet outputs by rows with `parquet_max_rows` (programmatic API). Set `sharding.mode` to anything other than `:single_file` to enable multi-part filenames.
 - **Read preference**: offload to secondaries or tagged analytics nodes when available. CLI: `--read-preference`, `--read-tags`.
@@ -268,7 +269,19 @@ Key points:
 - **Cursor timeout**: for very long scans, leave `noCursorTimeout` enabled. CLI: `--no-cursor-timeout true|false`.
 - **Telemetry**: enable to inspect timing breakdowns; disable for minimal output. CLI: `--telemetry on|off`.
 
-Benchmarking (optional):
+Bounded microbenchmarks:
+
+```bash
+bundle exec rake microbench
+
+# Compare against the checked-in baseline.
+bundle exec ruby benchmark/microbench.rb --baseline benchmark/baseline.json
+```
+
+The harness covers every runtime component, takes the median of five samples,
+and aborts any individual benchmark case after two seconds.
+
+Optional production-scale load benchmark (not part of the microbenchmark suite):
 
 ```bash
 # 1M docs benchmark with tunables (JSONL)
@@ -330,7 +343,7 @@ bundle exec bin/purplelight \
   --read-preference secondary --read-tags nodeType=ANALYTICS --dry-run
 ```
 
-### Quick Benchmark
+### Example load benchmark
 ```
 % BENCH=1 BENCH_PARTITIONS=16 BENCH_BATCH_SIZE=8000 BENCH_QUEUE_MB=512 BENCH_ROTATE_MB=512 BENCH_COMPRESSION=gzip bundle exec rspec spec/benchmark_perf_spec.rb --format doc
 
