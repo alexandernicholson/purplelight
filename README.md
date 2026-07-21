@@ -6,17 +6,28 @@ Snapshot MongoDB collections efficiently from Ruby with resumable, partitioned e
 
 Purplelight is published on RubyGems: [purplelight on RubyGems](https://rubygems.org/gems/purplelight).
 
+Requires Ruby 3.2 or newer and MongoDB 7 or 8.
+
 Add to your Gemfile:
 
 ```ruby
-gem 'purplelight', '~> 0.1.13'
+gem 'purplelight', '~> 0.1.17'
 ```
 
 Or install directly:
 
 ```bash
-gem install purplelight
+gem install purplelight -v '~> 0.1.17'
 ```
+
+`bigdecimal`, `logger`, and the MongoDB Ruby driver are installed automatically.
+To use zstd compression, add its optional backend:
+
+```ruby
+gem 'zstd-ruby', '~> 2.0'
+```
+
+Without `zstd-ruby` or `ruby-zstds`, a requested zstd output safely falls back to gzip.
 
 ### Quick start
 
@@ -124,8 +135,8 @@ Add optional dependencies:
 ```ruby
 # Gemfile
 group :parquet do
-  gem 'red-arrow', '>= 24.0'
-  gem 'red-parquet', '>= 24.0'
+  gem 'red-arrow', '>= 25.0'
+  gem 'red-parquet', '>= 25.0'
 end
 ```
 
@@ -224,7 +235,7 @@ bundle exec bin/purplelight \
 Notes:
 - Compression backend selection order is: requested format → `zstd-ruby` → `zstds` → `gzip`.
 - `--single-file` and `--by-size` update only the sharding mode/params and preserve any provided `--prefix`.
-– Parquet multi-part sizing can be controlled via `parquet_max_rows` programmatically, or via CLI `--parquet-max-rows`.
+- Parquet multi-part sizing can be controlled via `parquet_max_rows` programmatically, or via CLI `--parquet-max-rows`.
 - To increase concurrent connections, set `maxPoolSize` on your Mongo URI (used by `--uri`), e.g., `mongodb://.../?maxPoolSize=32`. A good starting point is `maxPoolSize >= --partitions`.
 
 ### Architecture
