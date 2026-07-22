@@ -13,6 +13,8 @@ module Purplelight
   # WriterParquet writes Parquet files via Apache Arrow when available.
   class WriterParquet
     DEFAULT_ROW_GROUP_SIZE = 10_000
+    DICTIONARY_CARDINALITY_LIMIT = 16
+    DICTIONARY_MIN_REPETITIONS = 4
 
     def initialize(directory:, prefix:, compression: :zstd, row_group_size: DEFAULT_ROW_GROUP_SIZE, logger: nil,
                    manifest: nil, single_file: true, schema: nil, rotate_rows: nil)
@@ -63,6 +65,8 @@ module Purplelight
       @buffer_head = 0
       @arrow_schema = nil
       @arrow_data_types = nil
+      @dictionary_paths = nil
+      @dictionary_paths_resolved = false
       @writer_path = nil
     end
 
@@ -79,10 +83,21 @@ module Purplelight
 
     def build_record_batch(documents)
       @columns ||= infer_columns(documents)
+      resolve_dictionary_paths = !@dictionary_paths_resolved
+      dictionary_paths = [] if resolve_dictionary_paths && @columns.none? { |name| name.include?('.') }
+      @dictionary_paths_resolved = true if resolve_dictionary_paths
       arrays = @columns.each_with_index.map do |name, index|
         values = documents.map { |document| extract_value(document, name) }
-        build_arrow_array(values, @arrow_data_types&.at(index))
+        array = build_arrow_array(values, @arrow_data_types&.at(index))
+        if dictionary_paths
+          data_type = array.value_data_type
+          path = list_dictionary_path(name, data_type)
+          path ||= name if data_type.is_a?(Arrow::StringDataType) && low_cardinality_strings?(values)
+          dictionary_paths << path if path
+        end
+        array
       end
+      @dictionary_paths = dictionary_paths if resolve_dictionary_paths
       batch = if @arrow_schema
                 Arrow::RecordBatch.new(@arrow_schema, arrays)
               else
@@ -287,10 +302,44 @@ module Purplelight
       end
     end
 
+    def list_dictionary_path(name, data_type)
+      return unless data_type.is_a?(Arrow::ListDataType)
+
+      path = name.dup
+      while data_type.is_a?(Arrow::ListDataType)
+        path << '.list.element'
+        data_type = data_type.field.data_type
+      end
+      return if data_type.is_a?(Arrow::BooleanDataType) || data_type.is_a?(Arrow::NullDataType)
+
+      path
+    end
+
+    def low_cardinality_strings?(values)
+      first = values.find { |value| !value.nil? }
+      return false unless first.is_a?(String)
+
+      distinct = {}
+      count = 0
+      values.each do |value|
+        next if value.nil?
+        return false unless value.is_a?(String)
+
+        count += 1
+        distinct[value] = true
+        return false if distinct.length > DICTIONARY_CARDINALITY_LIMIT
+      end
+      !distinct.empty? && count >= distinct.length * DICTIONARY_MIN_REPETITIONS
+    end
+
     def write_record_batch(batch, path)
       unless @pq_writer
         properties = build_writer_properties_for_compression(@compression)
         properties ||= Parquet::WriterProperties.new
+        if @dictionary_paths
+          properties.disable_dictionary
+          @dictionary_paths.each { |column_path| properties.enable_dictionary(column_path) }
+        end
         properties.max_row_group_length = @row_group_size
         @pq_writer = Parquet::ArrowFileWriter.open(batch.schema, path, properties)
       end

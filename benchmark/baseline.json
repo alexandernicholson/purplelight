@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-21T12:41:06Z",
+  "generated_at": "2026-07-21T15:57:50Z",
   "coverage": {
     "covered": [
       "manifest",
@@ -28,339 +28,759 @@
   "results": {
     "byte_queue_round_trip": {
       "iterations": 20000,
-      "seconds": 0.053941,
+      "seconds": 0.065391,
       "sample_seconds": [
-        0.007595,
-        0.018067,
-        0.007425,
-        0.013365,
-        0.007489
+        0.025423,
+        0.008077,
+        0.007332,
+        0.007017,
+        0.017542
       ],
-      "operations_per_second": 2633311.36,
+      "operations_per_second": 2476166.88,
       "allocated_objects": 100001,
       "allocations_per_operation": 5.0
     },
     "byte_queue_bulk_drain": {
       "iterations": 10,
-      "seconds": 0.058171,
+      "seconds": 0.056242,
       "sample_seconds": [
-        0.011596,
-        0.011667,
-        0.01175,
-        0.011877,
-        0.011281
+        0.011117,
+        0.011141,
+        0.011126,
+        0.011349,
+        0.011509
       ],
-      "operations_per_second": 857.12,
+      "operations_per_second": 897.59,
       "allocated_objects": 70,
       "allocations_per_operation": 7.0
     },
     "telemetry_counter_and_timer": {
       "iterations": 50000,
-      "seconds": 0.04747,
+      "seconds": 0.046463,
       "sample_seconds": [
-        0.009476,
-        0.009558,
-        0.009509,
-        0.009478,
-        0.009449
+        0.009533,
+        0.00932,
+        0.00927,
+        0.009117,
+        0.009223
       ],
-      "operations_per_second": 5275374.56,
+      "operations_per_second": 5393743.24,
       "allocated_objects": 0,
       "allocations_per_operation": 0.0
     },
     "telemetry_construction": {
       "iterations": 100000,
-      "seconds": 0.107426,
+      "seconds": 0.110846,
       "sample_seconds": [
-        0.02273,
-        0.021634,
-        0.020193,
-        0.021322,
-        0.021547
+        0.027056,
+        0.020808,
+        0.022361,
+        0.02009,
+        0.020531
       ],
-      "operations_per_second": 4641017.33,
+      "operations_per_second": 4805843.93,
       "allocated_objects": 300000,
       "allocations_per_operation": 3.0
     },
     "manifest_progress": {
       "iterations": 250,
-      "seconds": 0.714513,
+      "seconds": 0.708686,
       "sample_seconds": [
-        0.144839,
-        0.145152,
-        0.143372,
-        0.140609,
-        0.140541
+        0.143975,
+        0.140292,
+        0.140702,
+        0.141118,
+        0.142599
       ],
-      "operations_per_second": 1743.72,
-      "allocated_objects": 21250,
-      "allocations_per_operation": 85.0
+      "operations_per_second": 1771.57,
+      "allocated_objects": 21252,
+      "allocations_per_operation": 85.01
     },
     "partition_range_planning": {
       "iterations": 100000,
-      "seconds": 0.045859,
+      "seconds": 0.061333,
       "sample_seconds": [
-        0.009671,
-        0.009649,
-        0.009258,
-        0.008996,
-        0.008285
+        0.026656,
+        0.009021,
+        0.008832,
+        0.008527,
+        0.008297
       ],
-      "operations_per_second": 10801468.79,
+      "operations_per_second": 11322463.82,
       "allocated_objects": 100000,
       "allocations_per_operation": 1.0
     },
     "partition_cursor_sampling": {
       "iterations": 10,
-      "seconds": 0.006557,
+      "seconds": 0.006506,
       "sample_seconds": [
-        0.001337,
-        0.001296,
-        0.001314,
-        0.001294,
-        0.001316
+        0.001315,
+        0.001302,
+        0.001286,
+        0.001301,
+        0.001302
       ],
-      "operations_per_second": 7610.35,
+      "operations_per_second": 7680.49,
       "allocated_objects": 250,
       "allocations_per_operation": 25.0
     },
     "snapshot_configuration": {
       "iterations": 10000,
-      "seconds": 0.211803,
+      "seconds": 0.204242,
       "sample_seconds": [
-        0.043064,
-        0.041384,
-        0.042928,
-        0.042796,
-        0.041631
+        0.040722,
+        0.041442,
+        0.04068,
+        0.040386,
+        0.041012
       ],
-      "operations_per_second": 233666.7,
-      "allocated_objects": 170000,
+      "operations_per_second": 245567.51,
+      "allocated_objects": 170002,
       "allocations_per_operation": 17.0
     },
     "snapshot_empty_export": {
       "iterations": 20,
-      "seconds": 0.046427,
+      "seconds": 0.055533,
       "sample_seconds": [
-        0.008102,
-        0.007108,
-        0.008957,
-        0.014756,
-        0.007504
+        0.009149,
+        0.00743,
+        0.010262,
+        0.020069,
+        0.008623
       ],
-      "operations_per_second": 2468.53,
-      "allocated_objects": 3420,
-      "allocations_per_operation": 171.0
+      "operations_per_second": 2186.03,
+      "allocated_objects": 3422,
+      "allocations_per_operation": 171.1
     },
     "snapshot_raw_batching": {
       "iterations": 100,
-      "seconds": 0.059924,
+      "seconds": 0.057351,
       "sample_seconds": [
-        0.011836,
-        0.012093,
-        0.012064,
-        0.011962,
-        0.011969
+        0.011604,
+        0.011575,
+        0.011411,
+        0.011368,
+        0.011393
       ],
-      "operations_per_second": 8354.92,
+      "operations_per_second": 8763.47,
       "allocated_objects": 1800,
       "allocations_per_operation": 18.0
     },
     "snapshot_jsonl_serial_pipeline": {
       "iterations": 3,
-      "seconds": 1.593689,
+      "seconds": 1.635496,
       "sample_seconds": [
-        0.332539,
-        0.320695,
-        0.319876,
-        0.30983,
-        0.310749
+        0.34454,
+        0.325758,
+        0.340644,
+        0.315536,
+        0.309018
       ],
-      "operations_per_second": 9.38,
-      "allocated_objects": 543645,
-      "allocations_per_operation": 181215.0
+      "operations_per_second": 9.21,
+      "allocated_objects": 543647,
+      "allocations_per_operation": 181215.67
     },
     "snapshot_jsonl_pipeline": {
       "iterations": 3,
-      "seconds": 0.978552,
+      "seconds": 0.986188,
       "sample_seconds": [
-        0.195724,
-        0.195973,
-        0.19579,
-        0.195125,
-        0.19594
+        0.197135,
+        0.196786,
+        0.197211,
+        0.197905,
+        0.197151
       ],
-      "operations_per_second": 15.32,
-      "allocated_objects": 543867,
-      "allocations_per_operation": 181289.0
+      "operations_per_second": 15.22,
+      "allocated_objects": 543869,
+      "allocations_per_operation": 181289.67
     },
     "jsonl_batch_write": {
       "iterations": 100,
-      "seconds": 0.11875,
+      "seconds": 0.111044,
       "sample_seconds": [
-        0.022894,
-        0.025733,
-        0.021527,
-        0.024267,
-        0.024329
+        0.021916,
+        0.021842,
+        0.025587,
+        0.020918,
+        0.020781
       ],
-      "operations_per_second": 4120.82,
-      "allocated_objects": 182800,
-      "allocations_per_operation": 1828.0
+      "operations_per_second": 4578.34,
+      "allocated_objects": 182802,
+      "allocations_per_operation": 1828.02
     },
     "jsonl_zstd_batch_write": {
       "iterations": 50,
-      "seconds": 0.071127,
+      "seconds": 0.06922,
       "sample_seconds": [
-        0.016098,
-        0.012678,
-        0.013116,
-        0.013103,
-        0.016132
+        0.01349,
+        0.013059,
+        0.01289,
+        0.013011,
+        0.01677
       ],
-      "operations_per_second": 3812.14,
-      "allocated_objects": 92050,
-      "allocations_per_operation": 1841.0
+      "operations_per_second": 3828.78,
+      "allocated_objects": 92052,
+      "allocations_per_operation": 1841.04
     },
     "jsonl_preencoded_accounting": {
       "iterations": 10000,
-      "seconds": 0.155715,
+      "seconds": 0.154764,
       "sample_seconds": [
-        0.031233,
-        0.03071,
-        0.031271,
-        0.031395,
-        0.031106
+        0.030654,
+        0.031015,
+        0.030894,
+        0.031364,
+        0.030837
       ],
-      "operations_per_second": 320174.17,
+      "operations_per_second": 323687.45,
       "allocated_objects": 0,
       "allocations_per_operation": 0.0
     },
     "csv_batch_write": {
       "iterations": 100,
-      "seconds": 0.29281,
+      "seconds": 0.293376,
       "sample_seconds": [
-        0.057804,
-        0.058016,
-        0.058681,
-        0.059051,
-        0.059258
+        0.053863,
+        0.061627,
+        0.056016,
+        0.061445,
+        0.060425
       ],
-      "operations_per_second": 1704.13,
-      "allocated_objects": 363700,
-      "allocations_per_operation": 3637.0
+      "operations_per_second": 1654.94,
+      "allocated_objects": 363702,
+      "allocations_per_operation": 3637.02
     },
     "csv_zstd_batch_write": {
       "iterations": 50,
-      "seconds": 0.222587,
+      "seconds": 0.233272,
       "sample_seconds": [
-        0.05143,
-        0.046745,
-        0.038643,
-        0.052235,
-        0.033534
+        0.049286,
+        0.041579,
+        0.044768,
+        0.04899,
+        0.048649
       ],
-      "operations_per_second": 1069.63,
-      "allocated_objects": 182500,
-      "allocations_per_operation": 3650.0
+      "operations_per_second": 1027.77,
+      "allocated_objects": 182502,
+      "allocations_per_operation": 3650.04
     },
     "csv_gzip_batch_write": {
       "iterations": 50,
-      "seconds": 0.148172,
+      "seconds": 0.143877,
       "sample_seconds": [
-        0.027482,
-        0.034167,
-        0.027431,
-        0.031337,
-        0.027755
+        0.027111,
+        0.026331,
+        0.036606,
+        0.026717,
+        0.027112
       ],
-      "operations_per_second": 1801.48,
-      "allocated_objects": 182550,
-      "allocations_per_operation": 3651.0
+      "operations_per_second": 1844.27,
+      "allocated_objects": 182552,
+      "allocations_per_operation": 3651.04
     },
     "csv_counting_io_write": {
       "iterations": 100000,
-      "seconds": 0.041051,
+      "seconds": 0.035209,
       "sample_seconds": [
-        0.008018,
-        0.008041,
-        0.008821,
-        0.008223,
-        0.007948
+        0.007071,
+        0.007051,
+        0.007134,
+        0.006939,
+        0.007014
       ],
-      "operations_per_second": 12436264.16,
+      "operations_per_second": 14182385.2,
       "allocated_objects": 0,
       "allocations_per_operation": 0.0
     },
     "csv_row_serialization": {
       "iterations": 25000,
-      "seconds": 0.291323,
+      "seconds": 0.279785,
       "sample_seconds": [
-        0.061351,
-        0.057502,
-        0.057275,
-        0.057677,
-        0.057518
+        0.054681,
+        0.059591,
+        0.05232,
+        0.059951,
+        0.053242
       ],
-      "operations_per_second": 434646.55,
+      "operations_per_second": 457197.2,
       "allocated_objects": 375000,
       "allocations_per_operation": 15.0
     },
     "parquet_buffer_append": {
       "iterations": 5000,
-      "seconds": 0.005627,
+      "seconds": 0.005628,
       "sample_seconds": [
-        0.001129,
-        0.001121,
-        0.001122,
-        0.001125,
-        0.00113
+        0.001098,
+        0.001186,
+        0.001117,
+        0.001106,
+        0.001121
       ],
-      "operations_per_second": 4444444.64,
+      "operations_per_second": 4476275.24,
       "allocated_objects": 0,
       "allocations_per_operation": 0.0
     },
     "parquet_object_id_array": {
       "iterations": 1000,
-      "seconds": 0.237818,
+      "seconds": 0.229308,
       "sample_seconds": [
-        0.048408,
-        0.044886,
-        0.056985,
-        0.043491,
-        0.044048
+        0.04412,
+        0.044025,
+        0.046154,
+        0.050956,
+        0.044053
       ],
-      "operations_per_second": 22278.66,
+      "operations_per_second": 22665.46,
       "allocated_objects": 64000,
       "allocations_per_operation": 64.0
     },
     "parquet_batch_write": {
       "iterations": 10,
-      "seconds": 0.049999,
+      "seconds": 0.09166,
       "sample_seconds": [
-        0.010937,
-        0.00987,
-        0.009626,
-        0.00971,
-        0.009856
+        0.052028,
+        0.010425,
+        0.00997,
+        0.010049,
+        0.009188
       ],
-      "operations_per_second": 1014.61,
-      "allocated_objects": 18692,
-      "allocations_per_operation": 1869.2
+      "operations_per_second": 995.12,
+      "allocated_objects": 19222,
+      "allocations_per_operation": 1922.2
     },
     "parquet_row_group_write": {
       "iterations": 2,
-      "seconds": 0.18688,
+      "seconds": 0.186154,
       "sample_seconds": [
-        0.03926,
-        0.036353,
-        0.037264,
-        0.03747,
-        0.036533
+        0.036422,
+        0.039406,
+        0.041695,
+        0.034504,
+        0.034127
       ],
-      "operations_per_second": 53.67,
-      "allocated_objects": 68880,
-      "allocations_per_operation": 34440.0
+      "operations_per_second": 54.91,
+      "allocated_objects": 68986,
+      "allocations_per_operation": 34493.0
+    },
+    "parquet_read_full_table": {
+      "iterations": 10,
+      "seconds": 0.030373,
+      "sample_seconds": [
+        0.007322,
+        0.005853,
+        0.005759,
+        0.00575,
+        0.005689
+      ],
+      "operations_per_second": 1736.41,
+      "allocated_objects": 380,
+      "allocations_per_operation": 38.0
+    },
+    "parquet_read_row_groups": {
+      "iterations": 10,
+      "seconds": 0.030306,
+      "sample_seconds": [
+        0.005807,
+        0.006112,
+        0.006219,
+        0.006126,
+        0.006042
+      ],
+      "operations_per_second": 1636.13,
+      "allocated_objects": 480,
+      "allocations_per_operation": 48.0
+    },
+    "parquet_read_projection": {
+      "iterations": 25,
+      "seconds": 0.024149,
+      "sample_seconds": [
+        0.00506,
+        0.004772,
+        0.004853,
+        0.004763,
+        0.004701
+      ],
+      "operations_per_second": 5238.89,
+      "allocated_objects": 1425,
+      "allocations_per_operation": 57.0
+    },
+    "parquet_read_category": {
+      "iterations": 50,
+      "seconds": 0.042582,
+      "sample_seconds": [
+        0.008589,
+        0.008581,
+        0.00853,
+        0.008443,
+        0.008439
+      ],
+      "operations_per_second": 5861.66,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_date": {
+      "iterations": 50,
+      "seconds": 0.020498,
+      "sample_seconds": [
+        0.004104,
+        0.004145,
+        0.004105,
+        0.004065,
+        0.004079
+      ],
+      "operations_per_second": 12183.24,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_flag": {
+      "iterations": 50,
+      "seconds": 0.020281,
+      "sample_seconds": [
+        0.004084,
+        0.004065,
+        0.004033,
+        0.004055,
+        0.004044
+      ],
+      "operations_per_second": 12330.46,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_hash_list": {
+      "iterations": 50,
+      "seconds": 0.073747,
+      "sample_seconds": [
+        0.015044,
+        0.01472,
+        0.014526,
+        0.014728,
+        0.014729
+      ],
+      "operations_per_second": 3394.89,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_i16": {
+      "iterations": 50,
+      "seconds": 0.023719,
+      "sample_seconds": [
+        0.004704,
+        0.004746,
+        0.004758,
+        0.004741,
+        0.00477
+      ],
+      "operations_per_second": 10535.19,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_i32": {
+      "iterations": 50,
+      "seconds": 0.02468,
+      "sample_seconds": [
+        0.004956,
+        0.004946,
+        0.004911,
+        0.004953,
+        0.004914
+      ],
+      "operations_per_second": 10109.18,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_i64": {
+      "iterations": 50,
+      "seconds": 0.032992,
+      "sample_seconds": [
+        0.006369,
+        0.00655,
+        0.006616,
+        0.006668,
+        0.006789
+      ],
+      "operations_per_second": 7557.44,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_i8": {
+      "iterations": 50,
+      "seconds": 0.020171,
+      "sample_seconds": [
+        0.004047,
+        0.004107,
+        0.004026,
+        0.004013,
+        0.003978
+      ],
+      "operations_per_second": 12419.27,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_int_list": {
+      "iterations": 50,
+      "seconds": 0.060468,
+      "sample_seconds": [
+        0.012083,
+        0.012062,
+        0.012169,
+        0.012051,
+        0.012103
+      ],
+      "operations_per_second": 4138.05,
+      "allocated_objects": 2003,
+      "allocations_per_operation": 40.06
+    },
+    "parquet_read_long_text": {
+      "iterations": 50,
+      "seconds": 0.070799,
+      "sample_seconds": [
+        0.014215,
+        0.013996,
+        0.014224,
+        0.014229,
+        0.014135
+      ],
+      "operations_per_second": 3517.41,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_mixed_id": {
+      "iterations": 50,
+      "seconds": 0.048812,
+      "sample_seconds": [
+        0.009718,
+        0.009602,
+        0.009872,
+        0.009823,
+        0.009797
+      ],
+      "operations_per_second": 5103.6,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_nested": {
+      "iterations": 50,
+      "seconds": 0.053001,
+      "sample_seconds": [
+        0.010346,
+        0.010576,
+        0.010622,
+        0.010742,
+        0.010715
+      ],
+      "operations_per_second": 4707.21,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_nested_int_list": {
+      "iterations": 50,
+      "seconds": 0.070874,
+      "sample_seconds": [
+        0.014148,
+        0.014801,
+        0.014101,
+        0.014109,
+        0.013715
+      ],
+      "operations_per_second": 3543.84,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_nullable_flag": {
+      "iterations": 50,
+      "seconds": 0.021453,
+      "sample_seconds": [
+        0.004375,
+        0.004264,
+        0.004161,
+        0.004301,
+        0.004352
+      ],
+      "operations_per_second": 11625.2,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_nullable_score": {
+      "iterations": 50,
+      "seconds": 0.036034,
+      "sample_seconds": [
+        0.00719,
+        0.007139,
+        0.007193,
+        0.007199,
+        0.007313
+      ],
+      "operations_per_second": 6951.2,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_object_id": {
+      "iterations": 50,
+      "seconds": 0.048042,
+      "sample_seconds": [
+        0.009593,
+        0.009638,
+        0.00957,
+        0.009586,
+        0.009655
+      ],
+      "operations_per_second": 5212.13,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_object_id_list": {
+      "iterations": 50,
+      "seconds": 0.077701,
+      "sample_seconds": [
+        0.015525,
+        0.015522,
+        0.015646,
+        0.015537,
+        0.015471
+      ],
+      "operations_per_second": 3220.61,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_row_id": {
+      "iterations": 50,
+      "seconds": 0.033483,
+      "sample_seconds": [
+        0.006813,
+        0.006827,
+        0.006824,
+        0.00659,
+        0.006429
+      ],
+      "operations_per_second": 7338.91,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_score": {
+      "iterations": 50,
+      "seconds": 0.035378,
+      "sample_seconds": [
+        0.007036,
+        0.007053,
+        0.007043,
+        0.00708,
+        0.007166
+      ],
+      "operations_per_second": 7089.18,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_string_list": {
+      "iterations": 50,
+      "seconds": 0.083486,
+      "sample_seconds": [
+        0.01681,
+        0.016741,
+        0.016704,
+        0.016365,
+        0.016866
+      ],
+      "operations_per_second": 2986.68,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_time": {
+      "iterations": 50,
+      "seconds": 0.031529,
+      "sample_seconds": [
+        0.0063160000000000004,
+        0.0063160000000000004,
+        0.006309,
+        0.00627,
+        0.006318
+      ],
+      "operations_per_second": 7916.4,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_u16": {
+      "iterations": 50,
+      "seconds": 0.023675,
+      "sample_seconds": [
+        0.004727,
+        0.004744,
+        0.004724,
+        0.004749,
+        0.004731
+      ],
+      "operations_per_second": 10568.59,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_u32": {
+      "iterations": 50,
+      "seconds": 0.02498,
+      "sample_seconds": [
+        0.005005,
+        0.004978,
+        0.004969,
+        0.005033,
+        0.004995
+      ],
+      "operations_per_second": 10010.01,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_u64": {
+      "iterations": 50,
+      "seconds": 0.033401,
+      "sample_seconds": [
+        0.006821,
+        0.006775,
+        0.006823,
+        0.006583,
+        0.006399
+      ],
+      "operations_per_second": 7380.07,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_u8": {
+      "iterations": 50,
+      "seconds": 0.019733,
+      "sample_seconds": [
+        0.00399,
+        0.003898,
+        0.003976,
+        0.00392,
+        0.003949
+      ],
+      "operations_per_second": 12661.43,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_unique_text": {
+      "iterations": 50,
+      "seconds": 0.072319,
+      "sample_seconds": [
+        0.014467,
+        0.014536,
+        0.014379,
+        0.014257,
+        0.01468
+      ],
+      "operations_per_second": 3456.14,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
+    },
+    "parquet_read_utf8_text": {
+      "iterations": 50,
+      "seconds": 0.032683,
+      "sample_seconds": [
+        0.006359,
+        0.006559,
+        0.00652,
+        0.006601,
+        0.006644
+      ],
+      "operations_per_second": 7623.11,
+      "allocated_objects": 2000,
+      "allocations_per_operation": 40.0
     }
   }
 }

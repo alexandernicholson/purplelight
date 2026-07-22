@@ -336,7 +336,7 @@ RSpec.describe 'writer path coverage' do
             'tags' => %w[a b], 'numbers' => [1, 2], 'nested_numbers' => [[1], [2]],
             'object_ids' => [object_ids[0]],
             'hashes' => [{ 'x' => 1 }], 'mixed_numeric' => 1, 'mixed_float' => 1.5,
-            'empty_lists' => [], 'date' => Date.new(2026, 1, 1)
+            'empty_lists' => [], 'date' => Date.new(2026, 1, 1), 'time' => Time.utc(2026, 1, 1, 0, 0, 1)
           },
           {
             '_id' => object_ids[1], 'mixed_id' => 'literal',
@@ -347,7 +347,7 @@ RSpec.describe 'writer path coverage' do
             'tags' => [], 'numbers' => [], 'nested_numbers' => [[]],
             'object_ids' => [object_ids[1]],
             'hashes' => [{ 'x' => 2 }], 'mixed_numeric' => 2.5, 'mixed_float' => 2,
-            'empty_lists' => [], 'date' => Date.new(2026, 1, 2)
+            'empty_lists' => [], 'date' => Date.new(2026, 1, 2), 'time' => Time.utc(2026, 1, 1, 0, 0, 2)
           },
           {
             '_id' => nil, 'mixed_id' => nil,
@@ -358,7 +358,7 @@ RSpec.describe 'writer path coverage' do
             'tags' => nil, 'numbers' => nil, 'nested_numbers' => nil,
             'object_ids' => nil,
             'hashes' => nil, 'mixed_numeric' => nil, 'mixed_float' => nil,
-            'empty_lists' => nil, 'date' => nil
+            'empty_lists' => nil, 'date' => nil, 'time' => nil
           },
           {
             '_id' => object_ids[2], 'mixed_id' => object_ids[2],
@@ -369,7 +369,7 @@ RSpec.describe 'writer path coverage' do
             'tags' => ['c'], 'numbers' => [3], 'nested_numbers' => [[3]],
             'object_ids' => [object_ids[2]],
             'hashes' => [{ 'x' => 4 }], 'mixed_numeric' => 3.5, 'mixed_float' => 4.5,
-            'empty_lists' => [], 'date' => Date.new(2026, 1, 4)
+            'empty_lists' => [], 'date' => Date.new(2026, 1, 4), 'time' => Time.utc(2026, 1, 1, 0, 0, 4)
           }
         ]
         writer = described_class.new(directory:, prefix: 'types', compression: :zstd, row_group_size: 2)
@@ -393,6 +393,61 @@ RSpec.describe 'writer path coverage' do
         expected['mixed_float'] = expected['mixed_float'].map { |value| value&.to_f }
 
         expect(actual).to eq(expected)
+      end
+    end
+
+    it 'uses read-safe dictionary paths without changing round-trip values' do
+      Dir.mktmpdir do |directory|
+        documents = Array.new(68) do |index|
+          object_id = BSON::ObjectId.from_string(format('%024x', index + 1))
+          {
+            'category' => ((index % 17).zero? ? nil : "category-#{index % 4}"),
+            'dates' => [Date.new(2026, 1, 1) + (index % 7)],
+            'flags' => [index.even?, index.odd?],
+            'hash_lists' => [{ 'index' => index }],
+            'labels' => ["label-#{index % 8}"],
+            'mixed' => (index.even? ? "literal-#{index}" : object_id),
+            'nested' => { 'index' => index },
+            'nested_numbers' => [[index], [index + 1]],
+            'numbers' => [index, index + 1],
+            'object_ids' => [object_id],
+            'unique_text' => "row-#{index}"
+          }
+        end
+        writer = described_class.new(directory:, prefix: 'read-safe', compression: :zstd, row_group_size: 68)
+        writer.write_many(documents)
+        writer.close
+
+        expect(writer.instance_variable_get(:@dictionary_paths)).to eq(
+          [
+            'category',
+            'dates.list.element',
+            'hash_lists.list.element',
+            'labels.list.element',
+            'nested_numbers.list.element.list.element',
+            'numbers.list.element',
+            'object_ids.list.element'
+          ]
+        )
+
+        table = Arrow::Table.load(File.join(directory, 'read-safe.parquet'), format: :parquet)
+        normalize = lambda do |value|
+          value.is_a?(Arrow::Array) ? value.to_a.map { |item| normalize.call(item) } : value
+        end
+        %w[category dates flags labels nested_numbers numbers].each do |name|
+          actual = table[name].to_a.map { |value| normalize.call(value) }
+          expect(actual).to eq(documents.map { |document| document.fetch(name) })
+        end
+        expect(table['object_ids'].to_a.map { |value| normalize.call(value) }).to eq(
+          documents.map { |document| document.fetch('object_ids').map(&:to_s) }
+        )
+
+        dotted = described_class.new(directory:, prefix: 'dotted', compression: :zstd, row_group_size: 4)
+        dotted.write_many(Array.new(4) { { 'dotted.name' => 'same' } })
+        dotted.close
+        expect(dotted.instance_variable_get(:@dictionary_paths)).to be_nil
+        dotted_table = Arrow::Table.load(File.join(directory, 'dotted.parquet'), format: :parquet)
+        expect(dotted_table['dotted.name'].to_a).to eq(Array.new(4, 'same'))
       end
     end
 

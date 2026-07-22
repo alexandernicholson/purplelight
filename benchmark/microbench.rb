@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
+require 'date'
 require 'fileutils'
 require 'json'
 require 'stringio'
@@ -26,6 +27,40 @@ PARQUET_DOCS = Array.new(10_000) do |index|
     'active' => index.even?,
     'tags' => %w[alpha beta],
     'nested' => { 'value' => index }
+  }
+end.freeze
+PARQUET_READ_DOCS = Array.new(10_000) do |index|
+  object_id = BSON::ObjectId.from_string(format('%024x', index + 1))
+  nullable = (index % 11).zero?
+  {
+    'row_id' => 4_294_967_296 + index,
+    'u8' => index % 256,
+    'u16' => 1_000 + index,
+    'u32' => 1_000_000_000 + index,
+    'u64' => 5_000_000_000 + index,
+    'i8' => (index % 256) - 128,
+    'i16' => index - 32_768,
+    'i32' => index - 2_000_000_000,
+    'i64' => index - 9_000_000_000,
+    'flag' => index.even?,
+    'nullable_flag' => (nullable ? nil : index.even?),
+    'score' => index * 0.25,
+    'nullable_score' => (nullable ? nil : index * 0.5),
+    'category' => "category-#{index % 8}",
+    'unique_text' => format('row-%<index>08d-value-%<encoded>08x',
+                            index:, encoded: index * 2_654_435_761),
+    'utf8_text' => "日本語-#{index % 32}",
+    'long_text' => "#{format('%08d', index)}-#{'abcdefghijklmnopqrstuvwxyz' * 4}",
+    'object_id' => object_id,
+    'mixed_id' => (index.even? ? object_id : "literal-#{index}"),
+    'nested' => { 'index' => index, 'flag' => index.even? },
+    'date' => Date.new(2020, 1, 1) + (index % 365),
+    'time' => Time.utc(2020, 1, 1) + index,
+    'int_list' => (nullable ? nil : [index, index + 1, index + 2]),
+    'nested_int_list' => (nullable ? nil : [[index, index + 1], [index + 2]]),
+    'string_list' => (nullable ? nil : ["tag-#{index % 16}", "tag-#{(index + 1) % 16}"]),
+    'object_id_list' => (nullable ? nil : [object_id]),
+    'hash_list' => (nullable ? nil : [{ 'index' => index }])
   }
 end.freeze
 ENCODED_JSONL = DOCS.map { |document| "#{JSON.generate(document)}\n" }.join * 10
@@ -333,6 +368,58 @@ Dir.mktmpdir('purplelight-microbench') do |directory|
                                             compression: :zstd, row_group_size: 1_000, single_file: true)
     writer.write_many(PARQUET_DOCS)
     writer.close
+  end
+  parquet_read_writer = Purplelight::WriterParquet.new(
+    directory:,
+    prefix: 'parquet-read',
+    compression: :zstd,
+    row_group_size: 10_000,
+    single_file: true
+  )
+  parquet_read_writer.write_many(PARQUET_READ_DOCS)
+  parquet_read_writer.close
+  parquet_read_path = File.join(directory, 'parquet-read.parquet')
+  parquet_schema_reader = Parquet::ArrowFileReader.new(parquet_read_path)
+  parquet_column_indices = parquet_schema_reader.schema.fields.each_with_index.to_h do |field, index|
+    [field.name, index]
+  end.freeze
+  parquet_schema_reader.close
+
+  harness.register('parquet_read_full_table', paths: :writer_parquet, iterations: 10) do
+    reader = Parquet::ArrowFileReader.new(parquet_read_path)
+    reader.use_threads = true
+    table = reader.read_table
+    reader.close
+    raise 'Parquet full read row mismatch' unless table.n_rows == PARQUET_READ_DOCS.length
+  end
+
+  harness.register('parquet_read_row_groups', paths: :writer_parquet, iterations: 10) do
+    reader = Parquet::ArrowFileReader.new(parquet_read_path)
+    reader.use_threads = true
+    rows = reader.each_row_group.sum(&:n_rows)
+    reader.close
+    raise 'Parquet row-group read mismatch' unless rows == PARQUET_READ_DOCS.length
+  end
+
+  projected_indices = %w[row_id flag score].map { |name| parquet_column_indices.fetch(name) }.freeze
+  harness.register('parquet_read_projection', paths: :writer_parquet, iterations: 25) do
+    reader = Parquet::ArrowFileReader.new(parquet_read_path)
+    reader.use_threads = true
+    rows = reader.n_row_groups.times.sum do |index|
+      reader.read_row_group(index, projected_indices).n_rows
+    end
+    reader.close
+    raise 'Parquet projected read mismatch' unless rows == PARQUET_READ_DOCS.length
+  end
+
+  parquet_column_indices.each do |column, index|
+    harness.register("parquet_read_#{column}", paths: :writer_parquet, iterations: 50) do
+      reader = Parquet::ArrowFileReader.new(parquet_read_path)
+      reader.use_threads = true
+      values = reader.read_column_data(index)
+      reader.close
+      raise "Parquet #{column} read mismatch" unless values.length == PARQUET_READ_DOCS.length
+    end
   end
 
   baseline_index = ARGV.index('--baseline')
