@@ -47,6 +47,7 @@ PARQUET_READ_DOCS = Array.new(10_000) do |index|
     'score' => index * 0.25,
     'nullable_score' => (nullable ? nil : index * 0.5),
     'category' => "category-#{index % 8}",
+    'symbol' => :"symbol-#{index % 8}",
     'unique_text' => format('row-%<index>08d-value-%<encoded>08x',
                             index:, encoded: index * 2_654_435_761),
     'utf8_text' => "日本語-#{index % 32}",

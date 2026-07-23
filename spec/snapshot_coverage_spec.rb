@@ -195,6 +195,34 @@ RSpec.describe Purplelight::Snapshot do
     end
   end
 
+  it 'propagates writer failures without leaving readers blocked on a full queue' do
+    documents = Array.new(100) do |index|
+      { '_id' => BSON::ObjectId.new, 'value' => index, 'payload' => 'x' * 100 }
+    end
+    writer = instance_double(Purplelight::WriterParquet, close: nil)
+    allow(writer).to receive(:write_many).and_raise(ArgumentError, 'writer failed')
+    allow(Purplelight::WriterParquet).to receive(:new).and_return(writer)
+
+    Dir.mktmpdir do |directory|
+      snapshot = build_snapshot(directory, documents:, format: :parquet, batch_size: 1, queue_size_bytes: 1)
+      expect do
+        Timeout.timeout(1) { snapshot.run }
+      end.to raise_error(ArgumentError, 'writer failed')
+    end
+    expect(writer).to have_received(:close)
+  end
+
+  it 'propagates writer close failures to the caller' do
+    writer = instance_double(Purplelight::WriterParquet, write_many: nil)
+    allow(writer).to receive(:close).and_raise(IOError, 'close failed')
+    allow(Purplelight::WriterParquet).to receive(:new).and_return(writer)
+
+    Dir.mktmpdir do |directory|
+      snapshot = build_snapshot(directory, format: :parquet)
+      expect { snapshot.run }.to raise_error(IOError, 'close failed')
+    end
+  end
+
   it 'delegates the class entrypoint to a snapshot instance' do
     runner = instance_double(described_class, run: :complete)
     allow(described_class).to receive(:new).with(client: :client).and_return(runner)

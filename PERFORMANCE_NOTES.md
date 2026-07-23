@@ -1,18 +1,20 @@
 # Purplelight upgrade and performance notes
 
-Updated: 2026-07-21
+Updated: 2026-07-23
 
 ## Completed
 
 - Pinned managed development Ruby 4.0.2; no Homebrew Ruby is used.
 - Updated all Ruby 3.2-compatible dependencies: MongoDB Ruby driver 2.24.1, BSON 5.2.0, zstd-ruby 2.0.6, red-arrow/red-parquet 25.0.0, Rake 13.4.2, RSpec 3.13.2, RuboCop 1.88.2, SimpleCov 1.0.2, StackProf 0.2.28, and current transitives. `parallel` remains on 1.28 because 2.x requires Ruby 3.3; `diff-lcs` 2.0 remains blocked by RSpec's `< 2.0` constraint.
 - Updated CI to MongoDB 7 and 8, Ruby 3.2 and 4.0, Apache Arrow 25, and `actions/checkout@v7.0.1`.
-- Added 54 bounded microbenchmarks covering all eight runtime paths, including 27 Parquet column types plus full-table, row-group, and projection reads. The harness enforces 100% path registration, takes the median of five samples, measures allocations, and aborts each timed sample or allocation pass after two seconds. The slowest observed timed sample in the expanded suite was 0.360 seconds.
+- Added 55 bounded microbenchmarks covering all eight runtime paths, including 28 Parquet column types plus full-table, row-group, and projection reads. The harness enforces 100% path registration, takes the median of five samples, measures allocations, and aborts each timed sample or allocation pass after two seconds. The slowest observed timed sample in the expanded suite was 0.397 seconds.
 - Added CPU and object-allocation StackProf tasks plus generated flamegraph support.
 - Added SimpleCov line and branch enforcement. The full suite verifies 100% line and branch coverage, including CLI and MongoDB integration behavior.
 - Added focused behavioral coverage for queue backpressure, manifests, telemetry, partition planning, compression backends, rotations, Parquet row groups, resumability, concurrent JSONL writing, progress, and telemetry output.
 - Made persistent MongoDB fixtures rerunnable by dropping static test collections before seeding.
 - Persisted the exact Extended JSON partition plan in manifest version 2. Resume now reuses the original boundaries rather than replanning against a growing collection, preventing boundary replay and duplicate rows.
+- BSON Symbol values now use Purplelight's direct UTF-8 Arrow string builder for scalar columns and recursive list leaves. Cached row-group schemas therefore remain buildable instead of failing through red-arrow's unsupported `DictionaryDataType#build_array` path.
+- Snapshot reader and writer failures now atomically close and discard the shared byte queue, immediately waking blocked producers and preserving the first worker exception for the caller.
 
 ## Retained performance changes
 

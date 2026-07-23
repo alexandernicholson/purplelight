@@ -396,6 +396,26 @@ RSpec.describe 'writer path coverage' do
       end
     end
 
+    it 'round trips BSON symbol values and symbol lists across row groups' do
+      Dir.mktmpdir do |directory|
+        documents = [
+          { 'status' => :queued, 'labels' => %i[alpha beta] },
+          { 'status' => nil, 'labels' => nil },
+          { 'status' => 'complete', 'labels' => [:gamma] },
+          { 'status' => :queued, 'labels' => [] }
+        ]
+        writer = described_class.new(directory:, prefix: 'symbols', compression: :none, row_group_size: 2)
+        writer.write_many(documents)
+        writer.close
+
+        table = Arrow::Table.load(File.join(directory, 'symbols.parquet'), format: :parquet)
+        expect(table['status'].to_a).to eq(['queued', nil, 'complete', 'queued'])
+        expect(table['labels'].to_a.map { |value| value&.to_a }).to eq(
+          [%w[alpha beta], nil, ['gamma'], []]
+        )
+      end
+    end
+
     it 'uses read-safe dictionary paths without changing round-trip values' do
       Dir.mktmpdir do |directory|
         documents = Array.new(68) do |index|

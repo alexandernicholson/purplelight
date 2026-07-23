@@ -131,6 +131,12 @@ module Purplelight
 
       # Reader queue
       queue = ByteQueue.new(max_bytes: @queue_size_bytes)
+      failure_mutex = Mutex.new
+      worker_failure = nil
+      record_failure = lambda do |error|
+        failure_mutex.synchronize { worker_failure ||= error }
+        queue.close(discard: true)
+      end
 
       # Writer
       writer_count = @format == :jsonl ? [@writer_threads.to_i, 1].max : 1
@@ -163,9 +169,15 @@ module Purplelight
       readers = partition_filters.each_with_index.map do |pf, idx|
         Thread.new do
           local_telemetry = @telemetry_enabled ? Telemetry.new(enabled: true) : Telemetry::NULL
-          read_partition(idx: idx, filter_spec: pf, queue: queue, batch_size: @batch_size, manifest: manifest, telemetry: local_telemetry)
-          # Merge per-thread telemetry
-          @telemetry.merge!(local_telemetry) if @telemetry_enabled
+          begin
+            read_partition(idx: idx, filter_spec: pf, queue: queue, batch_size: @batch_size,
+                           manifest: manifest, telemetry: local_telemetry)
+          rescue StandardError => e
+            record_failure.call(e)
+          ensure
+            # Merge per-thread telemetry
+            @telemetry.merge!(local_telemetry) if @telemetry_enabled
+          end
         end
       end
 
@@ -182,8 +194,14 @@ module Purplelight
 
             worker_writer.write_many(batch)
           end
+        rescue StandardError => e
+          record_failure.call(e)
         ensure
-          worker_writer.close
+          begin
+            worker_writer.close
+          rescue StandardError => e
+            record_failure.call(e)
+          end
         end
       end
 
@@ -212,6 +230,9 @@ module Purplelight
       else
         @running = false
       end
+      worker_error = failure_mutex.synchronize { worker_failure }
+      raise worker_error if worker_error
+
       if @telemetry_enabled
         total = @telemetry.timers.values.sum
         breakdown = @telemetry.timers

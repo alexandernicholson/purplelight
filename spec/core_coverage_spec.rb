@@ -109,6 +109,14 @@ RSpec.describe 'core path coverage' do
       producer.join
       expect(failure.pop.message).to eq('queue closed')
     end
+    it 'discards buffered items when closed after a worker failure' do
+      queue = described_class.new(max_bytes: 8)
+      queue.push(:buffered, bytes: 8)
+      queue.close(discard: true)
+
+      expect(queue.size_bytes).to be_zero
+      expect(queue.pop).to be_nil
+    end
   end
 
   describe Purplelight::Telemetry do

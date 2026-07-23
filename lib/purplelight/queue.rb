@@ -43,8 +43,13 @@ module Purplelight
       end
     end
 
-    def close
+    def close(discard: false)
       @mutex.synchronize do
+        if discard
+          @queue.clear
+          @sizes.clear
+          @bytes = 0
+        end
         @closed = true
         @cv.broadcast
       end

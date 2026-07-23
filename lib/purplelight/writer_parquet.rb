@@ -118,7 +118,7 @@ module Purplelight
         return build_string_array(values)
       end
       return build_string_array(values) if data_type.is_a?(Arrow::StringDataType) ||
-                                           first.is_a?(String) || first.is_a?(Hash)
+                                           first.is_a?(String) || first.is_a?(Symbol) || first.is_a?(Hash)
       if (data_type.is_a?(Arrow::ListDataType) || first.is_a?(Array)) &&
          values.all? { |value| value.nil? || value.is_a?(Array) } &&
          (data_type || values.any? { |value| value && !value.empty? })
@@ -317,13 +317,14 @@ module Purplelight
 
     def low_cardinality_strings?(values)
       first = values.find { |value| !value.nil? }
-      return false unless first.is_a?(String)
+      string_like = first.is_a?(String) || first.is_a?(Symbol)
+      return false unless string_like
 
       distinct = {}
       count = 0
       values.each do |value|
         next if value.nil?
-        return false unless value.is_a?(String)
+        return false unless value.is_a?(String) || value.is_a?(Symbol)
 
         count += 1
         distinct[value] = true

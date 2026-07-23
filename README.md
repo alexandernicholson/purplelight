@@ -11,13 +11,13 @@ Requires Ruby 3.2 or newer and MongoDB 7 or 8.
 Add to your Gemfile:
 
 ```ruby
-gem 'purplelight', '~> 0.1.18'
+gem 'purplelight', '~> 0.1.19'
 ```
 
 Or install directly:
 
 ```bash
-gem install purplelight -v '~> 0.1.18'
+gem install purplelight -v '~> 0.1.19'
 ```
 
 `bigdecimal`, `logger`, and the MongoDB Ruby driver are installed automatically.
@@ -178,6 +178,7 @@ Notes for Parquet:
 - `--rotate-mb` / `part_bytes` do not affect Parquet part size; they apply to JSONL/CSV.
 - Use `sharding: { mode: :single_file }` to force a single `.parquet` file.
 - The first row group defines the Arrow schema. Later values must remain type-compatible; integer values outside the inferred width raise `RangeError` instead of wrapping.
+- BSON Symbol values, which the MongoDB driver exposes as Ruby `Symbol` objects, are exported as UTF-8 strings. This applies to scalar values and list elements across every row group.
 - Dictionary encoding is chosen from the first row group for read performance: list leaves retain it, while scalar strings use it only when they have at most 16 distinct values and average at least four repetitions per value.
 - Dictionary selection changes physical Parquet page encodings and file checksums only; logical schemas, values, nullability, ordering, and row-group boundaries remain compatible. Consumers should validate logical data rather than requiring a particular page encoding.
 - In the matched 50,000-row, 27-column benchmark, this policy improved full-table reads by 15.9%, row-group streaming by 29.1%, projected reads by 30.9%, and reduced file size by 31.5%. Existing snapshots must be re-exported to receive these gains; see `PERFORMANCE_NOTES.md` for the complete matrix.
